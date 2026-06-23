@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(WHATSAPP_VERIFY_TOKEN=testtoken WHATSAPP_OWNER_ID=04345717-c1a3-4ce4-971c-f6fd784ee007 node -e ' *)",
+      "Bash(curl -s \"http://localhost:3000/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=testtoken&hub.challenge=CHALLENGE123\")",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=testtoken&hub.challenge=CHALLENGE123\" -UseBasicParsing 2>&1)",
+      "Bash(node --input-type=module)"
+    ]
+  }
+}
