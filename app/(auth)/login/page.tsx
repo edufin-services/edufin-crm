@@ -42,7 +42,7 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-zinc-900">Welcome back</h1>
+      <h1 className="text-2xl font-semibold text-zinc-900">Welcome</h1>
       <p className="mt-2 text-sm text-zinc-500">
         Log in to your account to keep growing your sales.
       </p>
