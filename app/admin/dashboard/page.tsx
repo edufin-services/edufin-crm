@@ -238,25 +238,25 @@ export default async function AdminDashboardPage() {
       iconStyle: "bg-blue-50 text-blue-600 border border-blue-200/70 shadow-2xs",
       borderHover: "hover:border-blue-300/80",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
       ),
       sparkline: (
-        <svg width="40" height="20" viewBox="0 0 44 22" fill="none" className="shrink-0 text-blue-500/35 group-hover:text-blue-500/60 transition-colors">
+        <svg width="34" height="17" viewBox="0 0 44 22" fill="none" className="shrink-0 text-blue-500/35 group-hover:text-blue-500/60 transition-colors">
           <path d="M2 18 L10 15 L20 17 L30 8 L42 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
       footer: (
-        <div className="space-y-2 pt-3 mt-1 border-t border-zinc-100/90">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs gap-1 min-w-0">
+        <div className="space-y-1.5 pt-2 mt-0.5 border-t border-zinc-100/90">
+          <div className="flex items-center justify-between text-[11px] gap-1 min-w-0">
             <span className="text-zinc-500 font-medium truncate">Weekly Intake</span>
-            <span className="font-bold text-blue-700 flex items-center gap-1 shrink-0">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            <span className="font-bold text-blue-700 flex items-center gap-1 shrink-0 text-[11px]">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
               {newThisWeek} new
             </span>
           </div>
-          <div className="h-2 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
             <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500" style={{ width: `${totalLeads > 0 ? Math.min(100, Math.round((newThisWeek / totalLeads) * 100) * 2) : 0}%` }} />
           </div>
         </div>
@@ -269,10 +269,10 @@ export default async function AdminDashboardPage() {
       unit: "executives",
       isUnitBadge: false,
       badge: (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50/90 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold text-purple-700 border border-purple-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
-          <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2 shrink-0">
+        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50/90 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
+          <span className="relative flex h-1.5 w-1.5 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-purple-600"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-purple-600"></span>
           </span>
           {agentCoveragePct}% active
         </span>
@@ -281,22 +281,22 @@ export default async function AdminDashboardPage() {
       iconStyle: "bg-purple-50 text-purple-600 border border-purple-200/70 shadow-2xs",
       borderHover: "hover:border-purple-300/80",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 1 0 7.75" />
         </svg>
       ),
       sparkline: (
-        <svg width="40" height="20" viewBox="0 0 44 22" fill="none" className="shrink-0 text-purple-500/35 group-hover:text-purple-500/60 transition-colors">
+        <svg width="34" height="17" viewBox="0 0 44 22" fill="none" className="shrink-0 text-purple-500/35 group-hover:text-purple-500/60 transition-colors">
           <path d="M2 17 C10 17, 14 7, 22 7 C30 7, 34 13, 42 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
       footer: (
-        <div className="space-y-2 pt-3 mt-1 border-t border-zinc-100/90">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs gap-1 min-w-0">
+        <div className="space-y-1.5 pt-2 mt-0.5 border-t border-zinc-100/90">
+          <div className="flex items-center justify-between text-[11px] gap-1 min-w-0">
             <span className="text-zinc-500 font-medium truncate">Assigned Coverage</span>
-            <span className="font-bold text-purple-700 shrink-0">{activeLeadAgents} of {totalUsers} agents</span>
+            <span className="font-bold text-purple-700 shrink-0 text-[11px]">{activeLeadAgents} of {totalUsers} agents</span>
           </div>
-          <div className="h-2 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
             <div className="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500" style={{ width: `${agentCoveragePct}%` }} />
           </div>
         </div>
@@ -309,7 +309,7 @@ export default async function AdminDashboardPage() {
       unit: `of ${totalLeads} leads`,
       isUnitBadge: true,
       badge: (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50/90 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold text-emerald-700 border border-emerald-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50/90 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
           {conversionRate}% win
         </span>
@@ -318,22 +318,22 @@ export default async function AdminDashboardPage() {
       iconStyle: "bg-emerald-50 text-emerald-600 border border-emerald-200/70 shadow-2xs",
       borderHover: "hover:border-emerald-300/80",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" />
         </svg>
       ),
       sparkline: (
-        <svg width="40" height="20" viewBox="0 0 44 22" fill="none" className="shrink-0 text-emerald-500/35 group-hover:text-emerald-500/60 transition-colors">
+        <svg width="34" height="17" viewBox="0 0 44 22" fill="none" className="shrink-0 text-emerald-500/35 group-hover:text-emerald-500/60 transition-colors">
           <path d="M2 19 L12 14 L22 11 L32 7 L42 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
       footer: (
-        <div className="space-y-2 pt-3 mt-1 border-t border-zinc-100/90">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs gap-1 min-w-0">
+        <div className="space-y-1.5 pt-2 mt-0.5 border-t border-zinc-100/90">
+          <div className="flex items-center justify-between text-[11px] gap-1 min-w-0">
             <span className="text-zinc-500 font-medium truncate">Org Win Rate</span>
-            <span className="font-bold text-emerald-700 shrink-0">{conversionRate}%</span>
+            <span className="font-bold text-emerald-700 shrink-0 text-[11px]">{conversionRate}%</span>
           </div>
-          <div className="h-2 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500" style={{ width: `${winAdminPct}%` }} />
           </div>
         </div>
@@ -347,7 +347,7 @@ export default async function AdminDashboardPage() {
           unit: totalRevenue > 0 ? "payments" : "estimated",
           isUnitBadge: false,
           badge: (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50/90 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold text-amber-700 border border-amber-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
               {totalRevenue > 0 ? "Collected" : "Pipeline"}
             </span>
@@ -356,23 +356,23 @@ export default async function AdminDashboardPage() {
           iconStyle: "bg-amber-50 text-amber-600 border border-amber-200/70 shadow-2xs",
           borderHover: "hover:border-amber-300/80",
           icon: (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" />
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
           ),
           sparkline: (
-            <svg width="40" height="20" viewBox="0 0 44 22" fill="none" className="shrink-0 text-amber-500/35 group-hover:text-amber-500/60 transition-colors">
+            <svg width="34" height="17" viewBox="0 0 44 22" fill="none" className="shrink-0 text-amber-500/35 group-hover:text-amber-500/60 transition-colors">
               <path d="M2 16 L12 12 L22 15 L32 6 L42 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           ),
           footer: (
-            <div className="space-y-2 pt-3 mt-1 border-t border-zinc-100/90">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs gap-1 min-w-0">
+            <div className="space-y-1.5 pt-2 mt-0.5 border-t border-zinc-100/90">
+              <div className="flex items-center justify-between text-[11px] gap-1 min-w-0">
                 <span className="text-zinc-500 font-medium truncate">{totalRevenue > 0 ? "Payments & OTC" : "Pipeline total"}</span>
-                <span className="font-bold text-amber-700 shrink-0">{fmt(effectiveRevenue)}</span>
+                <span className="font-bold text-amber-700 shrink-0 text-[11px]">{fmt(effectiveRevenue)}</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
                 <div className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500" style={{ width: "100%" }} />
               </div>
             </div>
@@ -385,7 +385,7 @@ export default async function AdminDashboardPage() {
           unit: "in progress",
           isUnitBadge: false,
           badge: (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50/90 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-bold text-amber-700 border border-amber-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/70 shadow-2xs backdrop-blur-xs whitespace-nowrap shrink-0">
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
@@ -397,29 +397,29 @@ export default async function AdminDashboardPage() {
           iconStyle: "bg-amber-50 text-amber-600 border border-amber-200/70 shadow-2xs",
           borderHover: "hover:border-amber-300/80",
           icon: (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           ),
           sparkline: (
-            <svg width="40" height="20" viewBox="0 0 44 22" fill="none" className="shrink-0 text-amber-500/35 group-hover:text-amber-500/60 transition-colors">
+            <svg width="34" height="17" viewBox="0 0 44 22" fill="none" className="shrink-0 text-amber-500/35 group-hover:text-amber-500/60 transition-colors">
               <path d="M2 14 C10 6, 18 19, 26 9 C34 3, 38 13, 42 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           ),
           footer: (
-            <div className="space-y-2 pt-3 mt-1 border-t border-zinc-100/90">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs font-medium text-zinc-500 gap-1 min-w-0">
-                <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
-                  <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 shrink-0 rounded-full bg-blue-500 ring-2 ring-blue-100" />
+            <div className="space-y-1.5 pt-2 mt-0.5 border-t border-zinc-100/90">
+              <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 gap-1 min-w-0">
+                <span className="flex items-center gap-1 min-w-0 truncate">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500 ring-2 ring-blue-100" />
                   <strong className="font-bold text-zinc-800 shrink-0">{initialCount}</strong> <span className="truncate">Initial</span>
                 </span>
-                <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
-                  <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-100" />
+                <span className="flex items-center gap-1 min-w-0 truncate">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-100" />
                   <strong className="font-bold text-zinc-800 shrink-0">{connectedCount}</strong> <span className="truncate">Connected</span>
                 </span>
               </div>
-              <div className="flex h-2 w-full gap-1 rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
+              <div className="flex h-1.5 w-full gap-1 rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/40 overflow-hidden">
                 <div className="bg-blue-500 h-full rounded-full transition-all duration-500" style={{ width: `${initialAdminPct}%` }} title={`Initial: ${initialCount} (${initialAdminPct}%)`} />
                 <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${connectedAdminPct}%` }} title={`Connected: ${connectedCount} (${connectedAdminPct}%)`} />
               </div>
@@ -470,38 +470,38 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* ── Top 4 Modern Metric Cards ───────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 sm:gap-3.5">
         {STATS.map((stat) => (
           <div
             key={stat.id}
-            className={`group relative min-w-0 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4.5 sm:p-5 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_4px_16px_0_rgba(0,0,0,0.02)] transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.08),0_4px_10px_-2px_rgba(0,0,0,0.02)] ${stat.borderHover}`}
+            className={`group relative min-w-0 overflow-hidden rounded-xl sm:rounded-2xl border border-zinc-200/80 bg-white p-3.5 sm:p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_4px_16px_0_rgba(0,0,0,0.02)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,0,0,0.07)] ${stat.borderHover}`}
           >
             {/* Ambient Corner Glow */}
-            <div className={`pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${stat.ambientGlow} blur-2xl opacity-40 group-hover:opacity-75 group-hover:scale-125 transition-all duration-500`} />
+            <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.ambientGlow} blur-xl opacity-35 group-hover:opacity-65 transition-all duration-500`} />
 
             {/* Header: Icon + Label */}
-            <div className="relative z-10 flex items-center gap-2.5 min-w-0">
-              <div className={`flex h-8.5 w-8.5 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl shadow-xs transition-transform duration-200 group-hover:scale-105 ${stat.iconStyle}`}>
+            <div className="relative z-10 flex items-center gap-2 min-w-0">
+              <div className={`flex h-7 w-7 sm:h-7.5 sm:w-7.5 shrink-0 items-center justify-center rounded-lg shadow-2xs transition-transform duration-200 group-hover:scale-105 ${stat.iconStyle}`}>
                 {stat.icon}
               </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 leading-tight">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 leading-tight truncate">
                 {stat.label}
               </span>
             </div>
 
             {/* Metric Value + Sparkline */}
-            <div className="relative z-10 mt-3 sm:mt-3.5 mb-2 sm:mb-2.5 flex items-baseline justify-between gap-2 min-w-0">
-              <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap min-w-0">
-                <span className="text-2xl sm:text-3xl xl:text-[32px] font-black tracking-tight text-zinc-900 tabular-nums leading-none shrink-0">
+            <div className="relative z-10 mt-2 sm:mt-2.5 mb-1.5 flex items-baseline justify-between gap-2 min-w-0">
+              <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+                <span className="text-xl sm:text-2xl font-black tracking-tight text-zinc-900 tabular-nums leading-none shrink-0">
                   {stat.value}
                 </span>
                 {stat.unit && (
                   stat.isUnitBadge ? (
-                    <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600 border border-zinc-200/60 truncate">
+                    <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 border border-zinc-200/60 truncate">
                       {stat.unit}
                     </span>
                   ) : (
-                    <span className="text-[11px] sm:text-xs font-semibold text-zinc-400 truncate">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-zinc-400 truncate">
                       {stat.unit}
                     </span>
                   )
