@@ -15,6 +15,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Invalid notification update." }, { status: 400 });
   }
 
-  const notificationPrefs = setNotificationPrefs(session.userId, { [label]: enabled });
+  const notificationPrefs = await setNotificationPrefs(session.userId, { [label]: enabled });
   return NextResponse.json({ notificationPrefs });
 }

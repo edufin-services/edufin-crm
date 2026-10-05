@@ -13,14 +13,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const resetToken = getResetToken(token);
+  const resetToken = await getResetToken(token);
   if (!resetToken) {
     return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  updateUserPassword(resetToken.userId, passwordHash);
-  deleteResetToken(token);
+  await updateUserPassword(resetToken.userId, passwordHash);
+  await deleteResetToken(token);
 
   return NextResponse.json({ success: true });
 }

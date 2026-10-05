@@ -8,6 +8,6 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const notificationsReadAt = markNotificationsRead(session.userId);
+  const notificationsReadAt = await markNotificationsRead(session.userId);
   return NextResponse.json({ notificationsReadAt });
 }

@@ -7,6 +7,9 @@ type Profile = {
   name: string;
   email: string;
   phone: string;
+  isLeadPaused?: boolean;
+  leadPauseReason?: string;
+  leadPausedAt?: string;
 };
 
 type Company = {
@@ -16,13 +19,37 @@ type Company = {
   companyTimezone: string;
 };
 
+const GRADIENTS: Record<string, string> = {
+  A:"from-rose-400 to-rose-600",B:"from-pink-400 to-pink-600",C:"from-fuchsia-400 to-fuchsia-600",
+  D:"from-violet-400 to-violet-600",E:"from-indigo-400 to-indigo-600",F:"from-blue-400 to-blue-600",
+  G:"from-sky-400 to-sky-600",H:"from-cyan-400 to-cyan-600",I:"from-teal-400 to-teal-600",
+  J:"from-emerald-400 to-emerald-600",K:"from-green-400 to-green-600",L:"from-lime-400 to-lime-600",
+  M:"from-amber-400 to-amber-600",N:"from-orange-400 to-orange-600",O:"from-red-400 to-red-600",
+  P:"from-rose-400 to-rose-600",Q:"from-purple-400 to-purple-600",R:"from-blue-400 to-blue-600",
+  S:"from-sky-400 to-sky-600",T:"from-teal-400 to-teal-600",U:"from-cyan-400 to-cyan-600",
+  V:"from-violet-400 to-violet-600",W:"from-fuchsia-400 to-fuchsia-600",X:"from-indigo-400 to-indigo-600",
+  Y:"from-amber-400 to-amber-600",Z:"from-orange-400 to-orange-600",
+};
+const grad = (name: string) => GRADIENTS[name[0]?.toUpperCase() ?? "A"] ?? "from-emerald-500 to-teal-600";
+const initials = (name: string) => name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+
+const inputCls = "w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-2.5 text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-100 transition-colors";
+const labelCls = "mb-1.5 block text-xs font-bold text-zinc-500 uppercase tracking-wide";
+
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"personal" | "directing" | "company" | "security">("personal");
 
   const [profile, setProfile] = useState<Profile>({ name: "", email: "", phone: "" });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
+
+  const [directingPaused, setDirectingPaused] = useState(false);
+  const [directingReason, setDirectingReason] = useState("On Leave");
+  const [directingSaving, setDirectingSaving] = useState(false);
+  const [directingMessage, setDirectingMessage] = useState("");
+  const [directingError, setDirectingError] = useState("");
 
   const [company, setCompany] = useState<Company>({ company: "", companyWebsite: "", companyIndustry: "", companyTimezone: "" });
   const [companySaving, setCompanySaving] = useState(false);
@@ -43,11 +70,46 @@ export default function ProfilePage() {
     fetch("/api/account")
       .then((res) => res.json())
       .then((data) => {
-        if (data.profile) setProfile(data.profile);
+        if (data.profile) {
+          setProfile(data.profile);
+          setDirectingPaused(Boolean(data.profile.isLeadPaused));
+          if (data.profile.leadPauseReason) setDirectingReason(data.profile.leadPauseReason);
+        }
         if (data.company) setCompany(data.company);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDirectingSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setDirectingError("");
+    setDirectingMessage("");
+    setDirectingSaving(true);
+    const res = await fetch("/api/account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        isLeadPaused: directingPaused,
+        leadPauseReason: directingPaused ? directingReason.trim() : "",
+      }),
+    });
+    const data = await res.json();
+    setDirectingSaving(false);
+    if (!res.ok) {
+      setDirectingError(data.error ?? "Failed to update lead directing status.");
+      return;
+    }
+    if (data.profile) {
+      setProfile((prev) => ({ ...prev, ...data.profile }));
+      setDirectingPaused(Boolean(data.profile.isLeadPaused));
+    }
+    setDirectingMessage(
+      directingPaused
+        ? "Lead directing is paused. You will not receive automatic incoming leads."
+        : "Lead directing is active! You will receive incoming leads via round-robin."
+    );
+    setTimeout(() => setDirectingMessage(""), 4000);
+  }
 
   async function handleProfileSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,12 +123,10 @@ export default function ProfilePage() {
     });
     const data = await res.json();
     setProfileSaving(false);
-    if (!res.ok) {
-      setProfileError(data.error ?? "Something went wrong.");
-      return;
-    }
+    if (!res.ok) { setProfileError(data.error ?? "Something went wrong."); return; }
     setProfile(data.profile);
-    setProfileMessage("Profile updated.");
+    setProfileMessage("Profile info updated successfully!");
+    setTimeout(() => setProfileMessage(""), 3500);
   }
 
   async function handleCompanySubmit(e: React.FormEvent) {
@@ -81,24 +141,20 @@ export default function ProfilePage() {
     });
     const data = await res.json();
     setCompanySaving(false);
-    if (!res.ok) {
-      setCompanyError(data.error ?? "Something went wrong.");
-      return;
-    }
+    if (!res.ok) { setCompanyError(data.error ?? "Something went wrong."); return; }
     setCompany(data.company);
-    setCompanyMessage("Company info updated.");
+    setCompanyMessage("Company info updated successfully!");
+    setTimeout(() => setCompanyMessage(""), 3500);
   }
 
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPasswordError("");
     setPasswordMessage("");
-
     if (newPassword !== confirmPassword) {
       setPasswordError("New password and confirmation do not match.");
       return;
     }
-
     setPasswordSaving(true);
     const res = await fetch("/api/account/password", {
       method: "PATCH",
@@ -107,223 +163,458 @@ export default function ProfilePage() {
     });
     const data = await res.json();
     setPasswordSaving(false);
-    if (!res.ok) {
-      setPasswordError(data.error ?? "Something went wrong.");
-      return;
-    }
-    setPasswordMessage("Password updated.");
+    if (!res.ok) { setPasswordError(data.error ?? "Something went wrong."); return; }
+    setPasswordMessage("Password updated successfully!");
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
+    setTimeout(() => setPasswordMessage(""), 3500);
   }
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Loading...</p>;
+    return (
+      <div className="space-y-6">
+        <div className="h-40 rounded-3xl bg-zinc-200 animate-pulse" />
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 animate-pulse space-y-4">
+          <div className="h-5 w-40 rounded bg-zinc-200" />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-3 w-16 rounded bg-zinc-200" />
+              <div className="h-10 rounded-xl bg-zinc-100" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-900">Profile</h1>
-        <p className="mt-1 text-sm text-zinc-500">Manage your personal details, company info, and password.</p>
+    <div className="space-y-6 pb-10 max-w-4xl mx-auto">
+      {/* ── Profile Cover Banner & Header ───────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl border border-zinc-200/90 bg-white shadow-xs">
+        {/* Cover Graphic Header */}
+        <div className="h-32 w-full bg-gradient-to-r from-zinc-900 via-teal-900 to-zinc-900 relative">
+          <div className="absolute inset-0 bg-[radial-gradient(#2dd4bf_1px,transparent_1px)] [background-size:16px_16px] opacity-20" />
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            <span className="rounded-full bg-white/10 backdrop-blur-md px-3 py-1 text-xs font-bold text-teal-300 border border-white/10">
+              Active CRM Account
+            </span>
+          </div>
+        </div>
+
+        {/* Profile Info Overlay */}
+        <div className="relative px-6 pb-6 pt-0 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex items-end gap-4 -mt-12">
+            {/* Avatar Circle */}
+            <div className="relative">
+              <div className="flex h-24 w-24 flex-none items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl font-black text-white shadow-xl ring-4 ring-white">
+                {initials(profile.name || "U")}
+              </div>
+              <span className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white" title="Active" />
+            </div>
+
+            <div className="pb-1">
+              <h1 className="text-2xl font-black text-zinc-900 tracking-tight flex items-center gap-2">
+                {profile.name || "User Profile"}
+              </h1>
+              <p className="text-xs text-zinc-500 font-semibold flex items-center gap-2">
+                <span>{profile.email}</span>
+                {company.company && <span className="text-teal-700 font-bold">· {company.company}</span>}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {profile.isLeadPaused ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-extrabold text-amber-800 border border-amber-300">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                Leads Paused {profile.leadPauseReason ? `(${profile.leadPauseReason})` : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-800 border border-emerald-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Receiving Leads
+              </span>
+            )}
+            <span className="rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-extrabold text-teal-800 border border-teal-200/80">
+              Account Verified
+            </span>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-2 px-6 border-t border-zinc-100 bg-zinc-50/40 py-2">
+          {[
+            {
+              id: "personal",
+              label: "Personal Profile",
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              ),
+            },
+            {
+              id: "directing",
+              label: "Lead Directing & Availability",
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              ),
+            },
+            {
+              id: "company",
+              label: "Company Info",
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+                  <path d="M9 22v-4h6v4" />
+                  <path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" />
+                </svg>
+              ),
+            },
+            {
+              id: "security",
+              label: "Security & Password",
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              ),
+            },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+                activeTab === tab.id
+                  ? "bg-zinc-900 text-white shadow-xs"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+            >
+              <span>{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <form onSubmit={handleProfileSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
-        <h2 className="text-base font-semibold text-zinc-900">Personal information</h2>
-
-        {profileError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{profileError}</div>
-        )}
-        {profileMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">{profileMessage}</div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Full name</label>
-          <input
-            required
-            value={profile.name}
-            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Email</label>
-          <input
-            required
-            type="email"
-            value={profile.email}
-            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Phone</label>
-          <input
-            value={profile.phone}
-            onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-            placeholder="+1 555 123 4567"
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={profileSaving}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {profileSaving ? "Saving..." : "Save changes"}
-          </button>
-        </div>
-      </form>
-
-      <form onSubmit={handleCompanySubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
-        <h2 className="text-base font-semibold text-zinc-900">Company information</h2>
-
-        {companyError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{companyError}</div>
-        )}
-        {companyMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">{companyMessage}</div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Company name</label>
-          <input
-            required
-            value={company.company}
-            onChange={(e) => setCompany({ ...company, company: e.target.value })}
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700">Website</label>
-            <input
-              value={company.companyWebsite}
-              onChange={(e) => setCompany({ ...company, companyWebsite: e.target.value })}
-              placeholder="https://acme.com"
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            />
+      {/* ── Tab 1: Personal Information ─────────────────────────────────── */}
+      {activeTab === "personal" && (
+        <form onSubmit={handleProfileSubmit} className="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Personal Profile Details</h2>
+                <p className="text-xs text-zinc-400">Update your name, contact information, and email</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700">Industry</label>
-            <input
-              value={company.companyIndustry}
-              onChange={(e) => setCompany({ ...company, companyIndustry: e.target.value })}
-              placeholder="Education, Retail, ..."
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            />
+
+          {profileError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700 font-medium">{profileError}</div>}
+          {profileMessage && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700 font-bold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {profileMessage}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Full / Profile Name *</label>
+              <input required value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className={inputCls} placeholder="e.g. John Smith" />
+            </div>
+            <div>
+              <label className={labelCls}>Phone Number</label>
+              <input value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} placeholder="e.g. 9876543210" className={inputCls} />
+            </div>
           </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Timezone</label>
-          <input
-            value={company.companyTimezone}
-            onChange={(e) => setCompany({ ...company, companyTimezone: e.target.value })}
-            placeholder="e.g. Asia/Kolkata"
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
 
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={companySaving}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {companySaving ? "Saving..." : "Save changes"}
-          </button>
-        </div>
-      </form>
+          <div>
+            <label className={labelCls}>Email Address *</label>
+            <input required type="email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className={inputCls} />
+          </div>
 
-      <form onSubmit={handlePasswordSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
-        <h2 className="text-base font-semibold text-zinc-900">Password</h2>
-
-        {passwordError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{passwordError}</div>
-        )}
-        {passwordMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">{passwordMessage}</div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Current password</label>
-          <div className="relative mt-1.5">
-            <input
-              required
-              type={showCurrentPassword ? "text" : "password"}
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 pr-10 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            />
-            <button
-              type="button"
-              onClick={() => setShowCurrentPassword((v) => !v)}
-              className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
-              aria-label={showCurrentPassword ? "Hide password" : "Show password"}
-            >
-              {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
+            <button type="submit" disabled={profileSaving} className="rounded-xl bg-teal-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-teal-700 disabled:opacity-60 transition-colors shadow-2xs">
+              {profileSaving ? "Saving..." : "Save Profile Changes"}
             </button>
           </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700">New password</label>
-            <div className="relative mt-1.5">
-              <input
-                required
-                type={showNewPassword ? "text" : "password"}
-                minLength={8}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 pr-10 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword((v) => !v)}
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
-                aria-label={showNewPassword ? "Hide password" : "Show password"}
-              >
-                {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
-            <p className="mt-1.5 text-xs text-zinc-400">At least 8 characters.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700">Confirm new password</label>
-            <div className="relative mt-1.5">
-              <input
-                required
-                type={showConfirmPassword ? "text" : "password"}
-                minLength={8}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 pr-10 text-sm text-zinc-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((v) => !v)}
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
-                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-              >
-                {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
-          </div>
-        </div>
+        </form>
+      )}
 
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={passwordSaving}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {passwordSaving ? "Updating..." : "Update password"}
-          </button>
-        </div>
-      </form>
+      {/* ── Tab: Lead Directing & Availability ───────────────────────────── */}
+      {activeTab === "directing" && (
+        <form onSubmit={handleDirectingSubmit} className="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Lead Directing &amp; Availability</h2>
+                <p className="text-xs text-zinc-400">Control whether new inbound leads and round-robin allocations are directed to you</p>
+              </div>
+            </div>
+
+            {directingPaused ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                Directing Paused
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Active &amp; Receiving
+              </span>
+            )}
+          </div>
+
+          {directingError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700 font-medium">{directingError}</div>}
+          {directingMessage && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700 font-bold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {directingMessage}
+            </div>
+          )}
+
+          {/* Toggle Card */}
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900">Direct Inbound Leads To Me</h3>
+                <p className="text-xs text-zinc-500 mt-1 max-w-xl leading-relaxed">
+                  When enabled, you participate in branch round-robin distribution and will be automatically assigned incoming leads from Meta Ads, website forms, Google Sheets, and webhook integrations.
+                </p>
+                <p className="text-xs text-zinc-500 mt-1 max-w-xl leading-relaxed">
+                  When paused, incoming leads are automatically redirected to other available executives in your branch or team so no leads are missed.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDirectingPaused((prev) => !prev)}
+                className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  !directingPaused ? "bg-emerald-600" : "bg-amber-400"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    !directingPaused ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* When Paused, Provide Reason */}
+            {directingPaused && (
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3 animate-in fade-in">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wide mb-1.5">
+                    Pause Reason (Shown to Administrators &amp; Team)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {["On Leave", "Lunch Break", "Shift Ended", "Catching up with existing leads", "Training / Meeting"].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setDirectingReason(preset)}
+                        className={`px-3 py-1 text-xs rounded-xl font-semibold border transition-all cursor-pointer ${
+                          directingReason === preset
+                            ? "bg-amber-100 text-amber-900 border-amber-300 shadow-2xs"
+                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={directingReason}
+                    onChange={(e) => setDirectingReason(e.target.value)}
+                    placeholder="Describe reason (e.g. Taking leave today, off duty)..."
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
+            <button
+              type="submit"
+              disabled={directingSaving}
+              className={`rounded-xl px-5 py-2.5 text-xs font-bold text-white transition-all shadow-2xs cursor-pointer ${
+                directingPaused
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
+            >
+              {directingSaving ? "Saving Status..." : directingPaused ? "Confirm Pause Directing" : "Save Active Availability"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ── Tab 2: Company Information ──────────────────────────────────── */}
+      {activeTab === "company" && (
+        <form onSubmit={handleCompanySubmit} className="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Company &amp; Organization Profile</h2>
+                <p className="text-xs text-zinc-400">Configure your business details and operating parameters</p>
+              </div>
+            </div>
+          </div>
+
+          {companyError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700 font-medium">{companyError}</div>}
+          {companyMessage && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700 font-bold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {companyMessage}
+            </div>
+          )}
+
+          <div>
+            <label className={labelCls}>Company Name *</label>
+            <input required value={company.company} onChange={(e) => setCompany({ ...company, company: e.target.value })} className={inputCls} placeholder="e.g. FXpertise Travel & Forex" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Company Website</label>
+              <input value={company.companyWebsite} onChange={(e) => setCompany({ ...company, companyWebsite: e.target.value })} placeholder="https://edufinservices.com" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Industry Sector</label>
+              <input value={company.companyIndustry} onChange={(e) => setCompany({ ...company, companyIndustry: e.target.value })} placeholder="Forex, Financial Services, Travel" className={inputCls} />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Operating Timezone</label>
+            <input value={company.companyTimezone} onChange={(e) => setCompany({ ...company, companyTimezone: e.target.value })} placeholder="Asia/Kolkata (IST)" className={inputCls} />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
+            <button type="submit" disabled={companySaving} className="rounded-xl bg-teal-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-teal-700 disabled:opacity-60 transition-colors shadow-2xs">
+              {companySaving ? "Saving..." : "Save Company Changes"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ── Tab 3: Security & Password Management ───────────────────────── */}
+      {activeTab === "security" && (
+        <form onSubmit={handlePasswordSubmit} className="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Account Security &amp; Password</h2>
+                <p className="text-xs text-zinc-400">Update your login password and review session security</p>
+              </div>
+            </div>
+          </div>
+
+          {passwordError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700 font-medium">{passwordError}</div>}
+          {passwordMessage && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700 font-bold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {passwordMessage}
+            </div>
+          )}
+
+          <div>
+            <label className={labelCls}>Current Password *</label>
+            <div className="relative">
+              <input
+                required
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className={`${inputCls} pr-10`}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
+              >
+                {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>New Password *</label>
+              <div className="relative">
+                <input
+                  required
+                  type={showNewPassword ? "text" : "password"}
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={`${inputCls} pr-10`}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
+                >
+                  {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-400 font-medium">At least 8 characters</p>
+            </div>
+
+            <div>
+              <label className={labelCls}>Confirm New Password *</label>
+              <div className="relative">
+                <input
+                  required
+                  type={showConfirmPassword ? "text" : "password"}
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`${inputCls} pr-10`}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600"
+                >
+                  {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
+            <button type="submit" disabled={passwordSaving} className="rounded-xl bg-teal-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-teal-700 disabled:opacity-60 transition-colors shadow-2xs">
+              {passwordSaving ? "Updating..." : "Update Password"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

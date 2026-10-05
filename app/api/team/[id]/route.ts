@@ -9,6 +9,6 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/team
   }
 
   const { id } = await ctx.params;
-  deleteTeamMember(id, session.userId);
+  await deleteTeamMember(id, session.userId);
   return NextResponse.json({ success: true });
 }

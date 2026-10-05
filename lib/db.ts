@@ -1,9 +1,29 @@
 import "server-only";
-import fs from "fs";
-import path from "path";
 import { Channel, Stage } from "./constants";
+import { dbConnect } from "./mongoose";
+import {
+  AdminSettingsModel,
+  BranchModel,
+  ContactModel,
+  ConversationModel,
+  CorporateModel,
+  EmailReportLogModel,
+  ImportedLeadModel,
+  LeadActivityModel,
+  LeadModel,
+  MessageModel,
+  ReportSettingsModel,
+  ResetTokenModel,
+  SimPlanModel,
+  TaskModel,
+  TeamMemberModel,
+  UserModel,
+  WebsiteLeadModel,
+} from "./models";
 
-type User = {
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export type User = {
   id: string;
   name: string;
   company: string;
@@ -11,17 +31,22 @@ type User = {
   phone?: string;
   passwordHash: string;
   createdAt: string;
+  branchId?: string;
+  branchName?: string;
   companyWebsite?: string;
   companyIndustry?: string;
   companyTimezone?: string;
   channels?: Record<string, boolean>;
   notificationPrefs?: Record<string, boolean>;
   notificationsReadAt?: string;
+  isLeadPaused?: boolean;
+  leadPauseReason?: string;
+  leadPausedAt?: string;
 };
 
 export type Notification = {
   id: string;
-  type: "lead" | "message" | "task";
+  type: "lead" | "visit" | "message" | "task";
   title: string;
   message: string;
   href: string;
@@ -29,22 +54,85 @@ export type Notification = {
   read: boolean;
 };
 
-type ResetToken = {
-  token: string;
-  userId: string;
-  expiresAt: string;
+export type LeadDocument = {
+  name: string;
+  url: string;
+  uploadedAt: string;
 };
 
 export type Lead = {
   id: string;
   ownerId: string;
   name: string;
-  company: string;
   channel: Channel;
   value: number;
   stage: Stage;
   createdAt: string;
   whatsappId?: string;
+  email?: string;
+  phone?: string;
+  color?: string;
+  notes?: string;
+  formNotes?: string;
+  services?: string[];
+
+  // FXPertise Forex & Remittance Fields
+  serviceType?: string;
+  sourceCurrency?: string;
+  targetCurrency?: string;
+  exchangeRate?: number;
+  sourceAmount?: number;
+  targetAmount?: number;
+  fulfillmentType?: string;
+  deliveryAddress?: string;
+  panNumber?: string;
+  passportNumber?: string;
+  lrsPurpose?: string;
+  travelDate?: string;
+  assignedBranchId?: string;
+  assignedBranchName?: string;
+  corporateId?: string;
+  corporateStatus?: string;
+
+  // Education-specific
+  city?: string;
+  state?: string;
+  neetStatus?: string;
+  preferredCountry?: string;
+  preferredUniversity1?: string;
+  preferredUniversity2?: string;
+  assignAgent?: string;
+  // Payment amounts
+  firstPayment?: number;
+  secondPayment?: number;
+  thirdPaymentAmount?: number;
+  otcAmount?: number;
+  totalServiceCharge?: number;
+  // Client Visit Scope Fields
+  companyName?: string;
+  designation?: string;
+  yearlyVolume?: number;
+  rateOfferedCN?: number;
+  rateOfferedCard?: number;
+  rateOfferedTTDD?: number;
+  nextFollowUp?: string;
+  feedback?: string;
+  clientVisitStatus?: string;
+
+  // Documents
+  documents?: LeadDocument[];
+  proposalDoc?: LeadDocument | null;
+  registrationDoc?: LeadDocument | null;
+  admissionLetter?: LeadDocument | null;
+  invoices?: LeadDocument[];
+  otcInvoices?: LeadDocument[];
+  invitationLetter?: LeadDocument | null;
+  thirdPaymentInvoices?: LeadDocument[];
+  visaDocuments?: LeadDocument[];
+
+  deletedAt?: string | null;
+  updatedAt?: string | null;
+  confirmedAt?: string | null;
 };
 
 export type Conversation = {
@@ -76,6 +164,8 @@ export type Task = {
   type: "call" | "email" | "meeting" | "message";
   dueDate: string;
   done: boolean;
+  leadId?: string;
+  leadName?: string;
 };
 
 export type Contact = {
@@ -98,22 +188,99 @@ export type TeamMember = {
   role: string;
 };
 
-type DbShape = {
-  users: User[];
-  resetTokens: ResetToken[];
-  leads: Lead[];
-  conversations: Conversation[];
-  messages: Message[];
-  tasks: Task[];
-  contacts: Contact[];
-  teamMembers: TeamMember[];
+export type WebsiteLead = {
+  id: string;
+  name: string;
+  mobile: string;
+  state?: string;
+  neetStatus?: string;
+  budget?: string;
+  preferredCountry?: string;
+  remarks?: string;
+  source?: string;
+  createdAt: string;
 };
+
+export type ImportedLead = {
+  id: string;
+  name: string;
+  phone: string;
+  rawPhone?: string;
+  platform?: string;
+  channel?: Channel;
+  status: "pending" | "assigned" | "ignored";
+  assignedToUserId?: string | null;
+  assignedToUserName?: string | null;
+  assignedLeadId?: string | null;
+  assignedAt?: string | null;
+  uploadedAt: string;
+  fileName?: string;
+};
+
+export type LeadActivityType = "stage_change" | "new_lead" | "lead_confirmed" | "lead_updated" | "lead_deleted";
+
+export type LeadActivity = {
+  id: string;
+  type: LeadActivityType;
+  leadId: string;
+  leadName: string;
+  channel?: string;
+  ownerId?: string;
+  ownerName?: string;
+  previousStage?: string;
+  newStage?: string;
+  value?: number;
+  phone?: string;
+  email?: string;
+  details?: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+};
+
+export type ReportSettings = {
+  id: string;
+  dailyEnabled: boolean;
+  weeklyEnabled: boolean;
+  dailyReportTime: string;
+  weeklyReportDay: number;
+  lastDailySentAt: string | null;
+  lastWeeklySentAt: string | null;
+  lastDailyCronDate?: string | null;
+  lastWeeklyCronDate?: string | null;
+  recipientEmails?: string[];
+  customRecipientEmail?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  fromName?: string;
+};
+
+export type EmailReportLog = {
+  id: string;
+  reportType: "daily" | "weekly" | "manual";
+  recipient: string;
+  subject: string;
+  sentAt: string;
+  status: "success" | "failed";
+  leadCount: number;
+  connectedCount?: number;
+  stageChangeCount: number;
+  confirmedCount: number;
+  periodStart?: string;
+  periodEnd?: string;
+  error?: string;
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_CHANNELS: Record<string, boolean> = {
   WhatsApp: true,
   Instagram: true,
-  TikTok: false,
+  Facebook: true,
+  Ads: true,
   Email: true,
+  "Referral/Others": true,
 };
 
 export const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
@@ -124,174 +291,200 @@ export const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
   "Product updates & tips": false,
 };
 
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
-
-function emptyDb(): DbShape {
-  return {
-    users: [],
-    resetTokens: [],
-    leads: [],
-    conversations: [],
-    messages: [],
-    tasks: [],
-    contacts: [],
-    teamMembers: [],
-  };
-}
-
-function readDb(): DbShape {
-  if (!fs.existsSync(DB_PATH)) {
-    return emptyDb();
+function toPlain<T>(doc: unknown): T {
+  if (!doc) return doc as T;
+  const obj = (doc as { toObject?: () => Record<string, unknown> }).toObject?.() ?? (doc as Record<string, unknown>);
+  // Convert Map fields (channels, notificationPrefs) to plain objects
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === "_id" || k === "__v") continue;
+    if (v instanceof Map) {
+      result[k] = Object.fromEntries(v);
+    } else {
+      result[k] = v;
+    }
   }
-  const raw = fs.readFileSync(DB_PATH, "utf-8");
-  if (!raw.trim()) {
-    return emptyDb();
+  if (!result.id && (obj as Record<string, unknown>)._id) {
+    result.id = String((obj as Record<string, unknown>)._id);
   }
-  return { ...emptyDb(), ...(JSON.parse(raw) as Partial<DbShape>) };
+  if (result.stage === "Completed") {
+    result.stage = "Confirmed";
+  }
+  if (Array.isArray(result.services)) {
+    if (result.services.includes("Tours & Packages")) {
+      const hasTour = (result.services as string[]).some((s) => s === "Domestic Tours" || s === "International Tours");
+      if (hasTour) {
+        result.services = (result.services as string[]).filter((s) => s !== "Tours & Packages");
+      } else {
+        const notesText = `${String(result.notes || "")} ${String(result.formNotes || "")}`.toLowerCase();
+        const fallback = notesText.includes("international") ? "International Tours" : "Domestic Tours";
+        result.services = (result.services as string[]).map((s) => (s === "Tours & Packages" ? fallback : s));
+      }
+    }
+  }
+  if (result.serviceType === "Tours & Packages") {
+    const notesText = `${String(result.notes || "")} ${String(result.formNotes || "")}`.toLowerCase();
+    result.serviceType = notesText.includes("international") ? "International Tours" : "Domestic Tours";
+  }
+  return result as T;
 }
 
-function writeDb(data: DbShape) {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
+// ── Users ──────────────────────────────────────────────────────────────────
+
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } });
+  return doc ? toPlain<User>(doc) : undefined;
 }
 
-// Users / Account
-
-export function getUserByEmail(email: string): User | undefined {
-  const db = readDb();
-  return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+export async function getUserById(id: string): Promise<User | undefined> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id });
+  return doc ? toPlain<User>(doc) : undefined;
 }
 
-export function getUserById(id: string): User | undefined {
-  const db = readDb();
-  return db.users.find((u) => u.id === id);
-}
-
-export function createUser(user: Omit<User, "id" | "createdAt">): User {
-  const db = readDb();
-  const newUser: User = {
-    ...user,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-  };
-  db.users.push(newUser);
-  writeDb(db);
+export async function createUser(user: Omit<User, "id" | "createdAt">): Promise<User> {
+  await dbConnect();
+  const newUser: User = { ...user, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  await UserModel.create(newUser);
   return newUser;
 }
 
-export function updateUserPassword(userId: string, passwordHash: string) {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
-  if (!user) return;
-  user.passwordHash = passwordHash;
-  writeDb(db);
+export async function updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+  await dbConnect();
+  await UserModel.updateOne({ id: userId }, { $set: { passwordHash } });
 }
 
-export function updateUserProfile(userId: string, updates: Partial<Pick<User, "name" | "email" | "phone">>): User | undefined {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
-  if (!user) return undefined;
-  Object.assign(user, updates);
-  writeDb(db);
-  return user;
+export async function updateUser(
+  userId: string,
+  updates: Partial<Pick<User, "name" | "company" | "email" | "phone" | "passwordHash" | "branchId" | "branchName" | "isLeadPaused" | "leadPauseReason" | "leadPausedAt">>
+): Promise<User | undefined> {
+  await dbConnect();
+  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<User>(doc) : undefined;
 }
 
-export function updateCompanyInfo(
+export async function updateUserProfile(
+  userId: string,
+  updates: Partial<Pick<User, "name" | "email" | "phone" | "isLeadPaused" | "leadPauseReason" | "leadPausedAt">>
+): Promise<User | undefined> {
+  await dbConnect();
+  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<User>(doc) : undefined;
+}
+
+export async function setUserLeadPauseStatus(
+  userId: string,
+  isLeadPaused: boolean,
+  reason?: string
+): Promise<User | undefined> {
+  await dbConnect();
+  const updates: Record<string, any> = {
+    isLeadPaused,
+    leadPauseReason: isLeadPaused ? (reason || "") : "",
+    leadPausedAt: isLeadPaused ? new Date().toISOString() : "",
+  };
+  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<User>(doc) : undefined;
+}
+
+export async function updateCompanyInfo(
   userId: string,
   updates: Partial<Pick<User, "company" | "companyWebsite" | "companyIndustry" | "companyTimezone">>
-): User | undefined {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
-  if (!user) return undefined;
-  Object.assign(user, updates);
-  writeDb(db);
-  return user;
+): Promise<User | undefined> {
+  await dbConnect();
+  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<User>(doc) : undefined;
 }
 
-export function getUserChannels(userId: string): Record<string, boolean> {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function getUserChannels(userId: string): Promise<Record<string, boolean>> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id: userId });
+  const user = doc ? toPlain<User>(doc) : undefined;
   return { ...DEFAULT_CHANNELS, ...(user?.channels ?? {}) };
 }
 
-export function setUserChannel(userId: string, channel: string, connected: boolean): Record<string, boolean> {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function setUserChannel(userId: string, channel: string, connected: boolean): Promise<Record<string, boolean>> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id: userId });
+  const user = doc ? toPlain<User>(doc) : undefined;
   if (!user) return DEFAULT_CHANNELS;
-  user.channels = { ...DEFAULT_CHANNELS, ...(user.channels ?? {}), [channel]: connected };
-  writeDb(db);
-  return user.channels;
+  const channels = { ...DEFAULT_CHANNELS, ...(user.channels ?? {}), [channel]: connected };
+  await UserModel.updateOne({ id: userId }, { $set: { channels } });
+  return channels;
 }
 
-export function getNotificationPrefs(userId: string): Record<string, boolean> {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function getNotificationPrefs(userId: string): Promise<Record<string, boolean>> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id: userId });
+  const user = doc ? toPlain<User>(doc) : undefined;
   return { ...DEFAULT_NOTIFICATION_PREFS, ...(user?.notificationPrefs ?? {}) };
 }
 
-export function setNotificationPrefs(userId: string, prefs: Record<string, boolean>): Record<string, boolean> {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function setNotificationPrefs(userId: string, prefs: Record<string, boolean>): Promise<Record<string, boolean>> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id: userId });
+  const user = doc ? toPlain<User>(doc) : undefined;
   if (!user) return DEFAULT_NOTIFICATION_PREFS;
-  user.notificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(user.notificationPrefs ?? {}), ...prefs };
-  writeDb(db);
-  return user.notificationPrefs;
+  const notificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(user.notificationPrefs ?? {}), ...prefs };
+  await UserModel.updateOne({ id: userId }, { $set: { notificationPrefs } });
+  return notificationPrefs;
 }
 
-export function getNotifications(userId: string): Notification[] {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function getNotifications(userId: string): Promise<Notification[]> {
+  await dbConnect();
+  const doc = await UserModel.findOne({ id: userId });
+  const user = doc ? toPlain<User>(doc) : undefined;
   const prefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(user?.notificationPrefs ?? {}) };
   const readAt = user?.notificationsReadAt ? new Date(user.notificationsReadAt).getTime() : 0;
   const now = Date.now();
-
   const notifications: Notification[] = [];
 
   if (prefs["New lead assigned to me"]) {
-    const recentLeads = db.leads.filter(
-      (l) => l.ownerId === userId && now - new Date(l.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000
-    );
-    for (const lead of recentLeads) {
+    const since = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const leads = await LeadModel.find({ ownerId: userId, createdAt: { $gte: since } });
+    for (const lead of leads) {
+      const l = toPlain<Lead>(lead);
       notifications.push({
-        id: `lead-${lead.id}`,
+        id: `lead-${l.id}`,
         type: "lead",
-        title: `New lead: ${lead.name}`,
-        message: `${lead.company} · ${lead.channel} · ${lead.stage}`,
+        title: `New lead: ${l.name}`,
+        message: `${l.channel} · ${l.stage}`,
         href: "/dashboard/leads",
-        createdAt: lead.createdAt,
-        read: new Date(lead.createdAt).getTime() <= readAt,
+        createdAt: l.createdAt,
+        read: new Date(l.createdAt).getTime() <= readAt,
       });
     }
   }
 
   if (prefs["New message in inbox"]) {
-    const unreadConversations = db.conversations.filter((c) => c.ownerId === userId && c.unread > 0);
-    for (const conv of unreadConversations) {
+    const convs = await ConversationModel.find({ ownerId: userId, unread: { $gt: 0 } });
+    for (const conv of convs) {
+      const c = toPlain<Conversation>(conv);
       notifications.push({
-        id: `message-${conv.id}`,
+        id: `message-${c.id}`,
         type: "message",
-        title: `New message from ${conv.name}`,
-        message: conv.preview,
+        title: `New message from ${c.name}`,
+        message: c.preview,
         href: "/dashboard/chats",
-        createdAt: conv.updatedAt,
-        read: new Date(conv.updatedAt).getTime() <= readAt,
+        createdAt: c.updatedAt,
+        read: new Date(c.updatedAt).getTime() <= readAt,
       });
     }
   }
 
   if (prefs["Task due reminders"]) {
-    const dueTasks = db.tasks.filter(
-      (t) => t.ownerId === userId && !t.done && new Date(t.dueDate).getTime() <= now
-    );
-    for (const task of dueTasks) {
+    const tasks = await TaskModel.find({ ownerId: userId, done: false, dueDate: { $lte: new Date().toISOString() } });
+    for (const task of tasks) {
+      const t = toPlain<Task>(task);
       notifications.push({
-        id: `task-${task.id}`,
+        id: `task-${t.id}`,
         type: "task",
-        title: `Task due: ${task.title}`,
-        message: task.contact,
+        title: `Task due: ${t.title}`,
+        message: t.contact,
         href: "/dashboard/calendar",
-        createdAt: task.dueDate,
-        read: new Date(task.dueDate).getTime() <= readAt,
+        createdAt: t.dueDate,
+        read: new Date(t.dueDate).getTime() <= readAt,
       });
     }
   }
@@ -299,156 +492,492 @@ export function getNotifications(userId: string): Notification[] {
   return notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export function markNotificationsRead(userId: string): string {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === userId);
+export async function markNotificationsRead(userId: string): Promise<string> {
+  await dbConnect();
   const now = new Date().toISOString();
-  if (user) {
-    user.notificationsReadAt = now;
-    writeDb(db);
-  }
+  await UserModel.updateOne({ id: userId }, { $set: { notificationsReadAt: now } });
   return now;
 }
 
-// Password reset tokens
+// ── Reset tokens ───────────────────────────────────────────────────────────
 
-export function createResetToken(userId: string): ResetToken {
-  const db = readDb();
-  // Remove any existing tokens for this user
-  db.resetTokens = db.resetTokens.filter((t) => t.userId !== userId);
-  const token: ResetToken = {
+export async function createResetToken(userId: string): Promise<{ token: string; userId: string; expiresAt: string }> {
+  await dbConnect();
+  await ResetTokenModel.deleteMany({ userId });
+  const token = {
     token: crypto.randomUUID(),
     userId,
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   };
-  db.resetTokens.push(token);
-  writeDb(db);
+  await ResetTokenModel.create(token);
   return token;
 }
 
-export function getResetToken(token: string): ResetToken | undefined {
-  const db = readDb();
-  const found = db.resetTokens.find((t) => t.token === token);
-  if (!found) return undefined;
-  if (new Date(found.expiresAt).getTime() < Date.now()) return undefined;
-  return found;
+export async function getResetToken(token: string): Promise<{ token: string; userId: string; expiresAt: string } | undefined> {
+  await dbConnect();
+  const doc = await ResetTokenModel.findOne({ token });
+  if (!doc) return undefined;
+  const obj = toPlain<{ token: string; userId: string; expiresAt: string }>(doc);
+  if (new Date(obj.expiresAt).getTime() < Date.now()) return undefined;
+  return obj;
 }
 
-export function deleteResetToken(token: string) {
-  const db = readDb();
-  db.resetTokens = db.resetTokens.filter((t) => t.token !== token);
-  writeDb(db);
+export async function deleteResetToken(token: string): Promise<void> {
+  await dbConnect();
+  await ResetTokenModel.deleteOne({ token });
 }
 
-// Leads / Deals
+// ── Leads ──────────────────────────────────────────────────────────────────
 
-export function getLeadsByOwner(ownerId: string): Lead[] {
-  const db = readDb();
-  return db.leads.filter((l) => l.ownerId === ownerId);
+export async function getLeadById(id: string, ownerId: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOne({ id, ownerId, deletedAt: null });
+  return doc ? toPlain<Lead>(doc) : undefined;
 }
 
-export function createLead(lead: Omit<Lead, "id" | "createdAt">): Lead {
-  const db = readDb();
+export async function getAllUsers(): Promise<User[]> {
+  await dbConnect();
+  const docs = await UserModel.find({});
+  return docs.map((d) => toPlain<User>(d));
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await dbConnect();
+  await UserModel.deleteOne({ id });
+}
+
+export async function getAllLeads(): Promise<Lead[]> {
+  await dbConnect();
+  const docs = await LeadModel.find({ deletedAt: null }).sort({ createdAt: -1 });
+  return docs.map((d) => toPlain<Lead>(d));
+}
+
+export async function getLeadsByOwner(ownerId: string): Promise<Lead[]> {
+  await dbConnect();
+  const docs = await LeadModel.find({ ownerId, deletedAt: null }).sort({ createdAt: -1 });
+  return docs.map((d) => toPlain<Lead>(d));
+}
+
+// ── Lead Activity Logging ──────────────────────────────────────────────────
+
+export async function logLeadActivity(
+  activity: Omit<LeadActivity, "id" | "timestamp"> & { timestamp?: string }
+): Promise<LeadActivity> {
+  try {
+    await dbConnect();
+    const entry: LeadActivity = {
+      ...activity,
+      id: crypto.randomUUID(),
+      timestamp: activity.timestamp || new Date().toISOString(),
+    };
+    await LeadActivityModel.create(entry);
+    return entry;
+  } catch (err) {
+    console.error("[audit] Failed to log lead activity:", err);
+    return {
+      ...activity,
+      id: crypto.randomUUID(),
+      timestamp: activity.timestamp || new Date().toISOString(),
+    };
+  }
+}
+
+export async function getLeadActivities(filter?: {
+  since?: string;
+  until?: string;
+  leadId?: string;
+  type?: LeadActivityType;
+  ownerId?: string;
+  limit?: number;
+}): Promise<LeadActivity[]> {
+  await dbConnect();
+  const query: Record<string, any> = {};
+  if (filter?.since || filter?.until) {
+    query.timestamp = {};
+    if (filter.since) query.timestamp.$gte = filter.since;
+    if (filter.until) query.timestamp.$lte = filter.until;
+  }
+  if (filter?.leadId) query.leadId = filter.leadId;
+  if (filter?.type) query.type = filter.type;
+  if (filter?.ownerId) query.ownerId = filter.ownerId;
+  const limit = filter?.limit ?? 500;
+  const docs = await LeadActivityModel.find(query).sort({ timestamp: -1 }).limit(limit);
+  return docs.map((d) => toPlain<LeadActivity>(d));
+}
+
+export async function getLeadByWhatsappId(ownerId: string, whatsappId: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOne({ ownerId, whatsappId, deletedAt: null });
+  return doc ? toPlain<Lead>(doc) : undefined;
+}
+
+export async function createLead(lead: Omit<Lead, "id" | "createdAt">): Promise<Lead> {
+  await dbConnect();
+  const now = new Date().toISOString();
   const newLead: Lead = {
     ...lead,
     id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
+    confirmedAt: lead.stage === "Confirmed" ? now : null,
   };
-  db.leads.push(newLead);
-  writeDb(db);
+  await LeadModel.create(newLead);
+
+  // Auto-log new lead activity
+  logLeadActivity({
+    type: "new_lead",
+    leadId: newLead.id,
+    leadName: newLead.name,
+    channel: newLead.channel,
+    ownerId: newLead.ownerId,
+    newStage: newLead.stage,
+    value: newLead.value,
+    phone: newLead.phone,
+    email: newLead.email,
+    details: `New lead created via ${newLead.channel || "CRM"} in stage "${newLead.stage}"`,
+  }).catch((err) => console.error("[audit] createLead log error:", err));
+
+  if (newLead.stage === "Confirmed") {
+    logLeadActivity({
+      type: "lead_confirmed",
+      leadId: newLead.id,
+      leadName: newLead.name,
+      channel: newLead.channel,
+      ownerId: newLead.ownerId,
+      newStage: "Confirmed",
+      value: newLead.value,
+      phone: newLead.phone,
+      email: newLead.email,
+      details: `Lead created directly in Confirmed stage (Value: ${newLead.value || 0})`,
+    }).catch((err) => console.error("[audit] lead_confirmed log error:", err));
+  }
+
   return newLead;
 }
 
-export function updateLead(id: string, ownerId: string, updates: Partial<Pick<Lead, "stage" | "value" | "name" | "company" | "channel">>): Lead | undefined {
-  const db = readDb();
-  const lead = db.leads.find((l) => l.id === id && l.ownerId === ownerId);
-  if (!lead) return undefined;
-  Object.assign(lead, updates);
-  writeDb(db);
-  return lead;
+export async function updateLead(
+  id: string,
+  ownerId: string,
+  updates: Partial<Pick<Lead,
+    "stage" | "value" | "name" | "channel" | "email" | "phone" | "color" | "notes" | "formNotes" |
+    "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" | "ownerId" |
+    "assignedBranchId" | "assignedBranchName" |
+    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" |
+    "companyName" | "designation" | "yearlyVolume" | "rateOfferedCN" | "rateOfferedCard" | "rateOfferedTTDD" | "nextFollowUp" | "feedback" | "clientVisitStatus"
+  >>
+): Promise<Lead | undefined> {
+  await dbConnect();
+  const prevDoc = await LeadModel.findOne({ id, ownerId });
+  const prev = prevDoc ? toPlain<Lead>(prevDoc) : undefined;
+
+  const now = new Date().toISOString();
+  const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
+  if (updates.stage === "Confirmed" && prev?.stage !== "Confirmed") {
+    setUpdates.confirmedAt = now;
+  }
+
+  const doc = await LeadModel.findOneAndUpdate({ id, ownerId }, { $set: setUpdates }, { returnDocument: "after" });
+  if (!doc) return undefined;
+  const updated = toPlain<Lead>(doc);
+
+  if (prev && updates.stage && updates.stage !== prev.stage) {
+    logLeadActivity({
+      type: "stage_change",
+      leadId: updated.id,
+      leadName: updated.name,
+      channel: updated.channel,
+      ownerId: updated.ownerId,
+      previousStage: prev.stage,
+      newStage: updates.stage,
+      value: updated.value,
+      phone: updated.phone,
+      email: updated.email,
+      details: `Stage updated from "${prev.stage}" to "${updates.stage}"`,
+    }).catch((err) => console.error("[audit] stage_change log error:", err));
+
+    if (updates.stage === "Confirmed" && prev.stage !== "Confirmed") {
+      logLeadActivity({
+        type: "lead_confirmed",
+        leadId: updated.id,
+        leadName: updated.name,
+        channel: updated.channel,
+        ownerId: updated.ownerId,
+        previousStage: prev.stage,
+        newStage: "Confirmed",
+        value: updated.value,
+        phone: updated.phone,
+        email: updated.email,
+        details: `Lead reached Confirmed milestone! (Value: ${updated.value || 0})`,
+      }).catch((err) => console.error("[audit] lead_confirmed log error:", err));
+    }
+  } else if (prev) {
+    logLeadActivity({
+      type: "lead_updated",
+      leadId: updated.id,
+      leadName: updated.name,
+      channel: updated.channel,
+      ownerId: updated.ownerId,
+      newStage: updated.stage,
+      value: updated.value,
+      phone: updated.phone,
+      email: updated.email,
+      details: `Lead details updated`,
+    }).catch((err) => console.error("[audit] lead_updated log error:", err));
+  }
+
+  return updated;
 }
 
-export function deleteLead(id: string, ownerId: string) {
-  const db = readDb();
-  db.leads = db.leads.filter((l) => !(l.id === id && l.ownerId === ownerId));
-  writeDb(db);
+export async function deleteLead(id: string, ownerId: string): Promise<void> {
+  await dbConnect();
+  const doc = await LeadModel.findOneAndUpdate(
+    { id, ownerId },
+    { $set: { deletedAt: new Date().toISOString(), stage: "Closed" } },
+    { returnDocument: "after" }
+  );
+  if (doc) {
+    const l = toPlain<Lead>(doc);
+    logLeadActivity({
+      type: "lead_deleted",
+      leadId: l.id,
+      leadName: l.name,
+      channel: l.channel,
+      ownerId: l.ownerId,
+      previousStage: l.stage,
+      newStage: "Closed",
+      details: `Lead deleted / closed`,
+    }).catch((err) => console.error("[audit] deleteLead log error:", err));
+  }
 }
 
-// Contacts
-
-export function getContactsByOwner(ownerId: string): Contact[] {
-  const db = readDb();
-  return db.contacts.filter((c) => c.ownerId === ownerId);
+export async function getLeadByIdAdmin(id: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOne({ id });
+  return doc ? toPlain<Lead>(doc) : undefined;
 }
 
-export function createContact(contact: Omit<Contact, "id" | "createdAt">): Contact {
-  const db = readDb();
-  const newContact: Contact = {
-    ...contact,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-  };
-  db.contacts.push(newContact);
-  writeDb(db);
+export async function updateLeadAdmin(
+  id: string,
+  updates: Partial<Pick<Lead,
+    "ownerId" | "stage" | "value" | "name" | "channel" | "email" | "phone" | "color" | "notes" | "formNotes" |
+    "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" |
+    "assignedBranchId" | "assignedBranchName" |
+    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" |
+    "companyName" | "designation" | "yearlyVolume" | "rateOfferedCN" | "rateOfferedCard" | "rateOfferedTTDD" | "nextFollowUp" | "feedback" | "clientVisitStatus"
+  >>
+): Promise<Lead | undefined> {
+  await dbConnect();
+  const prevDoc = await LeadModel.findOne({ id });
+  const prev = prevDoc ? toPlain<Lead>(prevDoc) : undefined;
+
+  const now = new Date().toISOString();
+  const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
+  if (updates.stage === "Confirmed" && prev?.stage !== "Confirmed") {
+    setUpdates.confirmedAt = now;
+  }
+
+  const doc = await LeadModel.findOneAndUpdate({ id }, { $set: setUpdates }, { returnDocument: "after" });
+  if (!doc) return undefined;
+  const updated = toPlain<Lead>(doc);
+
+  if (prev && updates.stage && updates.stage !== prev.stage) {
+    logLeadActivity({
+      type: "stage_change",
+      leadId: updated.id,
+      leadName: updated.name,
+      channel: updated.channel,
+      ownerId: updated.ownerId,
+      previousStage: prev.stage,
+      newStage: updates.stage,
+      value: updated.value,
+      phone: updated.phone,
+      email: updated.email,
+      details: `Admin updated stage from "${prev.stage}" to "${updates.stage}"`,
+    }).catch((err) => console.error("[audit] admin stage_change log error:", err));
+
+    if (updates.stage === "Confirmed" && prev.stage !== "Confirmed") {
+      logLeadActivity({
+        type: "lead_confirmed",
+        leadId: updated.id,
+        leadName: updated.name,
+        channel: updated.channel,
+        ownerId: updated.ownerId,
+        previousStage: prev.stage,
+        newStage: "Confirmed",
+        value: updated.value,
+        phone: updated.phone,
+        email: updated.email,
+        details: `Lead confirmed via Admin (Value: ${updated.value || 0})`,
+      }).catch((err) => console.error("[audit] admin lead_confirmed log error:", err));
+    }
+  } else if (prev) {
+    logLeadActivity({
+      type: "lead_updated",
+      leadId: updated.id,
+      leadName: updated.name,
+      channel: updated.channel,
+      ownerId: updated.ownerId,
+      newStage: updated.stage,
+      value: updated.value,
+      phone: updated.phone,
+      email: updated.email,
+      details: `Admin updated lead details`,
+    }).catch((err) => console.error("[audit] admin lead_updated log error:", err));
+  }
+
+  return updated;
+}
+
+export async function deleteLeadAdmin(id: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOneAndUpdate(
+    { id },
+    { $set: { deletedAt: new Date().toISOString(), stage: "Closed" } },
+    { returnDocument: "after" }
+  );
+  if (doc) {
+    const l = toPlain<Lead>(doc);
+    logLeadActivity({
+      type: "lead_deleted",
+      leadId: l.id,
+      leadName: l.name,
+      channel: l.channel,
+      ownerId: l.ownerId,
+      previousStage: l.stage,
+      newStage: "Closed",
+      details: `Admin deleted / closed lead`,
+    }).catch((err) => console.error("[audit] deleteLeadAdmin log error:", err));
+    return l;
+  }
+  return undefined;
+}
+
+export async function restoreLeadAdmin(id: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOneAndUpdate({ id }, { $set: { deletedAt: null, stage: "Initial" } }, { returnDocument: "after" });
+  if (doc) {
+    const l = toPlain<Lead>(doc);
+    logLeadActivity({
+      type: "stage_change",
+      leadId: l.id,
+      leadName: l.name,
+      channel: l.channel,
+      ownerId: l.ownerId,
+      previousStage: "Closed",
+      newStage: "Initial",
+      details: `Admin restored lead to Initial stage`,
+    }).catch((err) => console.error("[audit] restoreLeadAdmin log error:", err));
+    return l;
+  }
+  return undefined;
+}
+
+export async function restoreLead(id: string, ownerId: string): Promise<Lead | undefined> {
+  await dbConnect();
+  const doc = await LeadModel.findOneAndUpdate({ id, ownerId }, { $set: { deletedAt: null, stage: "Initial" } }, { returnDocument: "after" });
+  if (doc) {
+    const l = toPlain<Lead>(doc);
+    logLeadActivity({
+      type: "stage_change",
+      leadId: l.id,
+      leadName: l.name,
+      channel: l.channel,
+      ownerId: l.ownerId,
+      previousStage: "Closed",
+      newStage: "Initial",
+      details: `Lead restored to Initial stage`,
+    }).catch((err) => console.error("[audit] restoreLead log error:", err));
+    return l;
+  }
+  return undefined;
+}
+
+export async function getDeletedLeads(): Promise<Lead[]> {
+  await dbConnect();
+  const docs = await LeadModel.find({ $or: [{ deletedAt: { $ne: null } }, { stage: "Closed" }] }).sort({ createdAt: -1 });
+  return docs.map((d) => toPlain<Lead>(d));
+}
+
+export async function getDeletedLeadsByOwner(ownerId: string): Promise<Lead[]> {
+  await dbConnect();
+  const docs = await LeadModel.find({ ownerId, $or: [{ deletedAt: { $ne: null } }, { stage: "Closed" }] }).sort({ createdAt: -1 });
+  return docs.map((d) => toPlain<Lead>(d));
+}
+
+// ── Contacts ───────────────────────────────────────────────────────────────
+
+export async function getContactsByOwner(ownerId: string): Promise<Contact[]> {
+  await dbConnect();
+  const docs = await ContactModel.find({ ownerId });
+  return docs.map((d) => toPlain<Contact>(d));
+}
+
+export async function getAllContacts(): Promise<Contact[]> {
+  await dbConnect();
+  const docs = await ContactModel.find({});
+  return docs.map((d) => toPlain<Contact>(d));
+}
+
+export async function createContact(contact: Omit<Contact, "id" | "createdAt">): Promise<Contact> {
+  await dbConnect();
+  const newContact: Contact = { ...contact, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  await ContactModel.create(newContact);
   return newContact;
 }
 
-export function updateContact(id: string, ownerId: string, updates: Partial<Pick<Contact, "name" | "company" | "email" | "phone" | "channel" | "tags">>): Contact | undefined {
-  const db = readDb();
-  const contact = db.contacts.find((c) => c.id === id && c.ownerId === ownerId);
-  if (!contact) return undefined;
-  Object.assign(contact, updates);
-  writeDb(db);
-  return contact;
+export async function updateContact(
+  id: string,
+  ownerId: string,
+  updates: Partial<Pick<Contact, "name" | "company" | "email" | "phone" | "channel" | "tags">>
+): Promise<Contact | undefined> {
+  await dbConnect();
+  const doc = await ContactModel.findOneAndUpdate({ id, ownerId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<Contact>(doc) : undefined;
 }
 
-export function deleteContact(id: string, ownerId: string) {
-  const db = readDb();
-  db.contacts = db.contacts.filter((c) => !(c.id === id && c.ownerId === ownerId));
-  writeDb(db);
+export async function deleteContact(id: string, ownerId: string): Promise<void> {
+  await dbConnect();
+  await ContactModel.deleteOne({ id, ownerId });
 }
 
-// Conversations & Messages
+// ── Conversations ──────────────────────────────────────────────────────────
 
-export function getConversationsByOwner(ownerId: string): Conversation[] {
-  const db = readDb();
-  return db.conversations.filter((c) => c.ownerId === ownerId);
+export async function getConversationsByOwner(ownerId: string): Promise<Conversation[]> {
+  await dbConnect();
+  // Delete any sample dummy conversations if they exist
+  await ConversationModel.deleteMany({ ownerId, name: { $in: ["Ananya Sharma", "Rohan Verma", "Priya Patel"] } });
+  const docs = await ConversationModel.find({ ownerId }).sort({ updatedAt: -1 });
+  return docs.map((d) => toPlain<Conversation>(d));
 }
 
-export function getConversationById(id: string, ownerId: string): Conversation | undefined {
-  const db = readDb();
-  return db.conversations.find((c) => c.id === id && c.ownerId === ownerId);
+export async function getConversationById(id: string, ownerId: string): Promise<Conversation | undefined> {
+  await dbConnect();
+  const doc = await ConversationModel.findOne({ id, ownerId });
+  return doc ? toPlain<Conversation>(doc) : undefined;
 }
 
-export function getConversationByWhatsappId(ownerId: string, whatsappId: string): Conversation | undefined {
-  const db = readDb();
-  return db.conversations.find((c) => c.ownerId === ownerId && c.whatsappId === whatsappId);
+export async function getConversationByWhatsappId(ownerId: string, whatsappId: string): Promise<Conversation | undefined> {
+  await dbConnect();
+  const doc = await ConversationModel.findOne({ ownerId, whatsappId });
+  return doc ? toPlain<Conversation>(doc) : undefined;
 }
 
-export function getLeadByWhatsappId(ownerId: string, whatsappId: string): Lead | undefined {
-  const db = readDb();
-  return db.leads.find((l) => l.ownerId === ownerId && l.whatsappId === whatsappId);
-}
-
-export function createConversation(conversation: Omit<Conversation, "id">): Conversation {
-  const db = readDb();
-  const newConversation: Conversation = {
-    ...conversation,
-    id: crypto.randomUUID(),
-  };
-  db.conversations.push(newConversation);
-  writeDb(db);
+export async function createConversation(conversation: Omit<Conversation, "id">): Promise<Conversation> {
+  await dbConnect();
+  const newConversation: Conversation = { ...conversation, id: crypto.randomUUID() };
+  await ConversationModel.create(newConversation);
   return newConversation;
 }
 
-export function getMessagesByConversation(conversationId: string, ownerId: string): Message[] {
-  const db = readDb();
-  return db.messages.filter((m) => m.conversationId === conversationId && m.ownerId === ownerId);
+export async function getMessagesByConversation(conversationId: string, ownerId: string): Promise<Message[]> {
+  await dbConnect();
+  const docs = await MessageModel.find({ conversationId, ownerId }).sort({ createdAt: 1 });
+  return docs.map((d) => toPlain<Message>(d));
 }
 
-export function createMessage(conversationId: string, ownerId: string, from: "me" | "them", text: string): Message | undefined {
-  const db = readDb();
-  const conversation = db.conversations.find((c) => c.id === conversationId && c.ownerId === ownerId);
+export async function createMessage(conversationId: string, ownerId: string, from: "me" | "them", text: string): Promise<Message | undefined> {
+  await dbConnect();
+  const conversation = await ConversationModel.findOne({ id: conversationId, ownerId });
   if (!conversation) return undefined;
 
   const message: Message = {
@@ -459,7 +988,7 @@ export function createMessage(conversationId: string, ownerId: string, from: "me
     text,
     createdAt: new Date().toISOString(),
   };
-  db.messages.push(message);
+  await MessageModel.create(message);
 
   conversation.preview = text;
   conversation.updatedAt = message.createdAt;
@@ -468,153 +997,758 @@ export function createMessage(conversationId: string, ownerId: string, from: "me
   } else {
     conversation.unread = 0;
   }
+  await conversation.save();
 
-  writeDb(db);
   return message;
 }
 
-export function markConversationRead(id: string, ownerId: string) {
-  const db = readDb();
-  const conversation = db.conversations.find((c) => c.id === id && c.ownerId === ownerId);
-  if (!conversation) return;
-  conversation.unread = 0;
-  writeDb(db);
+export async function markConversationRead(id: string, ownerId: string): Promise<void> {
+  await dbConnect();
+  await ConversationModel.updateOne({ id, ownerId }, { $set: { unread: 0 } });
 }
 
-// Tasks
+// ── Tasks ──────────────────────────────────────────────────────────────────
 
-export function getTasksByOwner(ownerId: string): Task[] {
-  const db = readDb();
-  return db.tasks.filter((t) => t.ownerId === ownerId);
+export async function getTasksByOwner(ownerId: string): Promise<Task[]> {
+  await dbConnect();
+  const docs = await TaskModel.find({ ownerId }).sort({ dueDate: 1 });
+  return docs.map((d) => toPlain<Task>(d));
 }
 
-export function createTask(task: Omit<Task, "id">): Task {
-  const db = readDb();
+export async function getAllTasks(): Promise<Task[]> {
+  await dbConnect();
+  const docs = await TaskModel.find({}).sort({ dueDate: 1 });
+  return docs.map((d) => toPlain<Task>(d));
+}
+
+export async function createTask(task: Omit<Task, "id">): Promise<Task> {
+  await dbConnect();
   const newTask: Task = { ...task, id: crypto.randomUUID() };
-  db.tasks.push(newTask);
-  writeDb(db);
+  await TaskModel.create(newTask);
   return newTask;
 }
 
-export function updateTask(id: string, ownerId: string, updates: Partial<Pick<Task, "title" | "contact" | "type" | "dueDate" | "done">>): Task | undefined {
-  const db = readDb();
-  const task = db.tasks.find((t) => t.id === id && t.ownerId === ownerId);
-  if (!task) return undefined;
-  Object.assign(task, updates);
-  writeDb(db);
-  return task;
+export async function getTasksByLead(ownerId: string, leadId: string): Promise<Task[]> {
+  await dbConnect();
+  const docs = await TaskModel.find({ ownerId, leadId }).sort({ dueDate: 1 });
+  return docs.map((d) => toPlain<Task>(d));
 }
 
-export function deleteTask(id: string, ownerId: string) {
-  const db = readDb();
-  db.tasks = db.tasks.filter((t) => !(t.id === id && t.ownerId === ownerId));
-  writeDb(db);
+export async function updateTask(
+  id: string,
+  ownerId: string,
+  updates: Partial<Pick<Task, "title" | "contact" | "type" | "dueDate" | "done" | "leadId" | "leadName">>
+): Promise<Task | undefined> {
+  await dbConnect();
+  const doc = await TaskModel.findOneAndUpdate({ id, ownerId }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<Task>(doc) : undefined;
 }
 
-// Team members
-
-export function getTeamMembers(ownerId: string): TeamMember[] {
-  const db = readDb();
-  return db.teamMembers.filter((m) => m.ownerId === ownerId);
+export async function updateTaskAdmin(
+  id: string,
+  updates: Partial<Pick<Task, "title" | "contact" | "type" | "dueDate" | "done" | "leadId" | "leadName">>
+): Promise<Task | undefined> {
+  await dbConnect();
+  const doc = await TaskModel.findOneAndUpdate({ id }, { $set: updates }, { returnDocument: "after" });
+  return doc ? toPlain<Task>(doc) : undefined;
 }
 
-export function createTeamMember(member: Omit<TeamMember, "id">): TeamMember {
-  const db = readDb();
+export async function deleteTask(id: string, ownerId: string): Promise<void> {
+  await dbConnect();
+  await TaskModel.deleteOne({ id, ownerId });
+}
+
+export async function deleteTaskAdmin(id: string): Promise<void> {
+  await dbConnect();
+  await TaskModel.deleteOne({ id });
+}
+
+// ── Team members ───────────────────────────────────────────────────────────
+
+export async function getTeamMembers(ownerId: string): Promise<TeamMember[]> {
+  await dbConnect();
+  const docs = await TeamMemberModel.find({ ownerId });
+  return docs.map((d) => toPlain<TeamMember>(d));
+}
+
+export async function createTeamMember(member: Omit<TeamMember, "id">): Promise<TeamMember> {
+  await dbConnect();
   const newMember: TeamMember = { ...member, id: crypto.randomUUID() };
-  db.teamMembers.push(newMember);
-  writeDb(db);
+  await TeamMemberModel.create(newMember);
   return newMember;
 }
 
-export function deleteTeamMember(id: string, ownerId: string) {
-  const db = readDb();
-  db.teamMembers = db.teamMembers.filter((m) => !(m.id === id && m.ownerId === ownerId));
-  writeDb(db);
+export async function deleteTeamMember(id: string, ownerId: string): Promise<void> {
+  await dbConnect();
+  await TeamMemberModel.deleteOne({ id, ownerId });
 }
 
-// Seed sample data for a newly created account
+// ── Website Leads (from edufin.com) ────────────────────────────────────────
 
-export function seedAccountData(ownerId: string) {
-  const db = readDb();
-  const now = Date.now();
-  const isoDaysAgo = (days: number, hours = 0) =>
-    new Date(now - days * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000).toISOString();
-  const todayAt = (hour: number) => {
-    const d = new Date();
-    d.setHours(hour, 0, 0, 0);
-    return d.toISOString();
+export async function getWebsiteLeads(): Promise<WebsiteLead[]> {
+  await dbConnect();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const docs = await WebsiteLeadModel.find().sort({ createdAt: -1 }).limit(500).lean() as any[];
+  return docs.map((d) => ({
+    id: String(d._id),
+    name: d.name ?? "",
+    mobile: d.mobile ?? "",
+    state: d.state,
+    neetStatus: d.neetStatus,
+    budget: d.budget,
+    preferredCountry: d.preferredCountry,
+    remarks: d.remarks,
+    source: d.source,
+    createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : String(d.createdAt ?? ""),
+  }));
+}
+
+// ── Seed sample data ───────────────────────────────────────────────────────
+
+export async function seedAccountData(_ownerId: string): Promise<void> {
+  // Seeding disabled
+  return;
+}
+
+// ── FXPertise Forex & Marketplace DB Helpers ─────────────────────────────
+
+export async function getAllBranches() {
+  await dbConnect();
+
+  // One-time migration fallback for legacy users created prior to branch selection
+  await UserModel.updateMany(
+    { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /mouparna/i } },
+    { $set: { branchId: "br-kolkata-01", branchName: "Kolkata Branch" } }
+  ).catch(() => {});
+  await UserModel.updateMany(
+    { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /sheeba/i } },
+    { $set: { branchId: "br-delhi-01", branchName: "Delhi NCR Branch" } }
+  ).catch(() => {});
+
+  const defaultBranches = [
+    {
+      id: "br-delhi-01",
+      name: "Delhi NCR Branch",
+      city: "Delhi NCR",
+      address: "Inner Circle, Connaught Place, New Delhi 110001",
+      phone: "+91 98100 11223",
+      email: "delhi@edufinservices.com",
+      kycStatus: "verified",
+      status: "active",
+      walletBalance: 180000,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "br-kolkata-01",
+      name: "Kolkata Branch",
+      city: "Kolkata",
+      address: "Park Street / Salt Lake Sector V, Kolkata 700016",
+      phone: "+91 98300 55443",
+      email: "kolkata@edufinservices.com",
+      kycStatus: "verified",
+      status: "active",
+      walletBalance: 150000,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  for (const b of defaultBranches) {
+    const existing = await BranchModel.findOne({ id: b.id });
+    if (!existing) {
+      await BranchModel.create(b).catch(() => {});
+    } else if (existing.name !== b.name) {
+      await BranchModel.updateOne({ id: b.id }, { $set: { name: b.name, city: b.city } }).catch(() => {});
+    }
+  }
+
+  const docs = await BranchModel.find({
+    $or: [
+      { id: "br-delhi-01" },
+      { id: "br-kolkata-01" },
+      { city: { $regex: /delhi/i } },
+      { city: { $regex: /kolkata/i } },
+    ],
+  });
+  return docs.map((d) => toPlain(d));
+}
+
+export async function getUsersByBranch(branchCityOrKey: string): Promise<User[]> {
+  await dbConnect();
+  const lower = branchCityOrKey.toLowerCase().trim();
+  const isKolkata = lower.includes("kolkata");
+  const isDelhi = lower.includes("delhi");
+
+  const allUsers = await getAllUsers();
+  return allUsers.filter((u) => {
+    const bId = (u.branchId || "").toLowerCase();
+    const bName = (u.branchName || "").toLowerCase();
+    const comp = (u.company || "").toLowerCase();
+    const email = (u.email || "").toLowerCase();
+    const name = (u.name || "").toLowerCase();
+
+    if (isKolkata) {
+      return (
+        bId.includes("kolkata") ||
+        bName.includes("kolkata") ||
+        comp.includes("kolkata") ||
+        (!u.branchId && (email.includes("mouparna") || name.includes("mouparna")))
+      );
+    }
+    if (isDelhi) {
+      return (
+        bId.includes("delhi") ||
+        bName.includes("delhi") ||
+        comp.includes("delhi") ||
+        (!u.branchId && (email.includes("sheeba") || name.includes("sheeba")))
+      );
+    }
+    return false;
+  });
+}
+
+export async function getNextBranchUserRoundRobin(branchCityOrKey: string): Promise<User | undefined> {
+  await dbConnect();
+  const lower = (branchCityOrKey || "").toLowerCase().trim();
+  const isKolkata = lower.includes("kolkata");
+  const isDelhi = lower.includes("delhi");
+
+  const branchUsers = await getUsersByBranch(branchCityOrKey);
+  // Filter out users who have paused lead directing
+  const activeBranchUsers = branchUsers.filter((u) => !u.isLeadPaused);
+
+  if (activeBranchUsers.length === 1) {
+    return activeBranchUsers[0];
+  }
+
+  if (activeBranchUsers.length > 1) {
+    const fieldToInc = isKolkata ? "kolkataRoundRobinIndex" : "delhiRoundRobinIndex";
+    const updatedSettings = await AdminSettingsModel.findOneAndUpdate(
+      { id: "admin_settings" },
+      { $inc: { [fieldToInc]: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    const idx = Math.abs((updatedSettings as any)?.[fieldToInc] || 0) % activeBranchUsers.length;
+    return activeBranchUsers[idx];
+  }
+
+  // If no active users in this branch, find any active user across the entire CRM
+  const allUsers = await getAllUsers();
+  const allActiveUsers = allUsers.filter((u) => !u.isLeadPaused);
+
+  if (allActiveUsers.length > 0) {
+    if (allActiveUsers.length === 1) {
+      return allActiveUsers[0];
+    }
+    const updatedSettings = await AdminSettingsModel.findOneAndUpdate(
+      { id: "admin_settings" },
+      { $inc: { globalRoundRobinIndex: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
+    const idx = Math.abs((updatedSettings as any)?.globalRoundRobinIndex || 0) % allActiveUsers.length;
+    return allActiveUsers[idx];
+  }
+
+  // Emergency fallback if ALL users are paused: return first user so lead is not dropped
+  if (branchUsers.length > 0) return branchUsers[0];
+  if (allUsers.length > 0) return allUsers[0];
+  return undefined;
+}
+
+export async function getBranchById(id: string) {
+  await dbConnect();
+  const doc = await BranchModel.findOne({ id });
+  return doc ? toPlain(doc) : null;
+}
+
+export async function createOrUpdateBranch(branchData: {
+  id?: string;
+  name: string;
+  city: string;
+  address: string;
+  phone: string;
+  email: string;
+  status?: "active" | "suspended";
+}) {
+  await dbConnect();
+  const id = branchData.id || `br-${branchData.city.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 10)}-${Date.now().toString().slice(-4)}`;
+  const updated = await BranchModel.findOneAndUpdate(
+    { id },
+    {
+      $set: {
+        ...branchData,
+        id,
+        updatedAt: new Date().toISOString(),
+      },
+      $setOnInsert: {
+        createdAt: new Date().toISOString(),
+        kycStatus: "verified",
+        walletBalance: 100000,
+        margins: {},
+      },
+    },
+    { upsert: true, returnDocument: "after" }
+  );
+  return toPlain(updated);
+}
+
+export async function updateBranchMargins(branchId: string, margins: Record<string, { buyMargin: number; sellMargin: number }>) {
+  await dbConnect();
+  await BranchModel.updateOne({ id: branchId }, { $set: { margins } });
+}
+
+export async function createForexOrder(orderData: Partial<Lead>) {
+  await dbConnect();
+  const id = `fx-${crypto.randomUUID().slice(0, 8)}`;
+  const newOrder = {
+    ...orderData,
+    id,
+    ownerId: orderData.ownerId || "public-user",
+    createdAt: new Date().toISOString(),
+    stage: orderData.stage || "Initial",
+    value: orderData.sourceAmount || 1000,
+    channel: orderData.channel || "WhatsApp",
   };
-
-  const sampleLeads: Lead[] = [
-    { id: crypto.randomUUID(), ownerId, name: "David Kim", company: "Northwind", channel: "WhatsApp", value: 2100, stage: "Initial Contact", createdAt: isoDaysAgo(0, 1) },
-    { id: crypto.randomUUID(), ownerId, name: "Lena Fischer", company: "Orbit Labs", channel: "Instagram", value: 3400, stage: "Initial Contact", createdAt: isoDaysAgo(1) },
-    { id: crypto.randomUUID(), ownerId, name: "Tom Becker", company: "Greenfield", channel: "Email", value: 1200, stage: "Connected", createdAt: isoDaysAgo(2) },
-    { id: crypto.randomUUID(), ownerId, name: "Marco Rossi", company: "Verde Foods", channel: "Instagram", value: 1850, stage: "Interested", createdAt: isoDaysAgo(0, 2) },
-    { id: crypto.randomUUID(), ownerId, name: "Yuki Sato", company: "Hanabi Co.", channel: "TikTok", value: 5000, stage: "Proposal", createdAt: isoDaysAgo(3) },
-    { id: crypto.randomUUID(), ownerId, name: "Sarah Mitchell", company: "Brightline Co.", channel: "WhatsApp", value: 4200, stage: "Registration", createdAt: isoDaysAgo(0, 4) },
-    { id: crypto.randomUUID(), ownerId, name: "Omar Haddad", company: "Dune Retail", channel: "Email", value: 7600, stage: "Admission Letter", createdAt: isoDaysAgo(4) },
-    { id: crypto.randomUUID(), ownerId, name: "Aiko Tanaka", company: "Loop Studio", channel: "TikTok", value: 6400, stage: "2nd Payment", createdAt: isoDaysAgo(0, 6) },
-    { id: crypto.randomUUID(), ownerId, name: "Priya Nair", company: "Solace Health", channel: "Email", value: 9300, stage: "Invitation", createdAt: isoDaysAgo(5) },
-    { id: crypto.randomUUID(), ownerId, name: "Carlos Diaz", company: "Fenix Sports", channel: "WhatsApp", value: 3950, stage: "Visa Process", createdAt: isoDaysAgo(6) },
-  ];
-
-  const conv1 = crypto.randomUUID();
-  const conv2 = crypto.randomUUID();
-  const conv3 = crypto.randomUUID();
-  const conv4 = crypto.randomUUID();
-  const conv5 = crypto.randomUUID();
-
-  const sampleConversations: Conversation[] = [
-    { id: conv1, ownerId, name: "Sarah Mitchell", company: "Brightline Co.", channel: "WhatsApp", preview: "Thanks, can you send the updated quote?", unread: 2, updatedAt: isoDaysAgo(0, 0.05) },
-    { id: conv2, ownerId, name: "Marco Rossi", company: "Verde Foods", channel: "Instagram", preview: "Is this still available in blue?", unread: 1, updatedAt: isoDaysAgo(0, 0.3) },
-    { id: conv3, ownerId, name: "Aiko Tanaka", company: "Loop Studio", channel: "TikTok", preview: "We'd like to move forward with the deal.", unread: 0, updatedAt: isoDaysAgo(0, 1) },
-    { id: conv4, ownerId, name: "David Kim", company: "Northwind", channel: "WhatsApp", preview: "Sounds good, talk soon!", unread: 0, updatedAt: isoDaysAgo(0, 3) },
-    { id: conv5, ownerId, name: "Priya Nair", company: "Solace Health", channel: "Email", preview: "Invoice received, thank you!", unread: 0, updatedAt: isoDaysAgo(1) },
-  ];
-
-  const sampleMessages: Message[] = [
-    { id: crypto.randomUUID(), conversationId: conv1, ownerId, from: "them", text: "Hi! I saw your post about the new collection.", createdAt: isoDaysAgo(0, 5) },
-    { id: crypto.randomUUID(), conversationId: conv1, ownerId, from: "me", text: "Hi Sarah! Yes, it just launched. Want me to send the catalog?", createdAt: isoDaysAgo(0, 4.8) },
-    { id: crypto.randomUUID(), conversationId: conv1, ownerId, from: "them", text: "Yes please, and pricing for bulk orders too.", createdAt: isoDaysAgo(0, 4.7) },
-    { id: crypto.randomUUID(), conversationId: conv1, ownerId, from: "me", text: "Sure — sending the quote now.", createdAt: isoDaysAgo(0, 4) },
-    { id: crypto.randomUUID(), conversationId: conv1, ownerId, from: "them", text: "Thanks, can you send the updated quote?", createdAt: isoDaysAgo(0, 0.05) },
-
-    { id: crypto.randomUUID(), conversationId: conv2, ownerId, from: "them", text: "Hey, saw your story — is this still available in blue?", createdAt: isoDaysAgo(0, 0.6) },
-    { id: crypto.randomUUID(), conversationId: conv2, ownerId, from: "me", text: "Yes! We have it in stock. Want me to reserve one for you?", createdAt: isoDaysAgo(0, 0.3) },
-
-    { id: crypto.randomUUID(), conversationId: conv3, ownerId, from: "them", text: "Our team reviewed the proposal.", createdAt: isoDaysAgo(0, 1.2) },
-    { id: crypto.randomUUID(), conversationId: conv3, ownerId, from: "them", text: "We'd like to move forward with the deal.", createdAt: isoDaysAgo(0, 1.1) },
-    { id: crypto.randomUUID(), conversationId: conv3, ownerId, from: "me", text: "That's great news! I'll send the contract over today.", createdAt: isoDaysAgo(0, 1) },
-
-    { id: crypto.randomUUID(), conversationId: conv4, ownerId, from: "me", text: "Hi David, following up on our call earlier.", createdAt: isoDaysAgo(0, 3.2) },
-    { id: crypto.randomUUID(), conversationId: conv4, ownerId, from: "them", text: "Sounds good, talk soon!", createdAt: isoDaysAgo(0, 3) },
-
-    { id: crypto.randomUUID(), conversationId: conv5, ownerId, from: "me", text: "Hi Priya, here's the invoice for this month.", createdAt: isoDaysAgo(1, 1) },
-    { id: crypto.randomUUID(), conversationId: conv5, ownerId, from: "them", text: "Invoice received, thank you!", createdAt: isoDaysAgo(1) },
-  ];
-
-  const sampleTasks: Task[] = [
-    { id: crypto.randomUUID(), ownerId, title: "Follow-up call about pricing", contact: "Sarah Mitchell · Brightline Co.", type: "call", dueDate: todayAt(11), done: false },
-    { id: crypto.randomUUID(), ownerId, title: "Reply to Instagram inquiry", contact: "Marco Rossi · Verde Foods", type: "message", dueDate: todayAt(13), done: false },
-    { id: crypto.randomUUID(), ownerId, title: "Demo call with procurement team", contact: "Aiko Tanaka · Loop Studio", type: "meeting", dueDate: todayAt(15), done: false },
-    { id: crypto.randomUUID(), ownerId, title: "Send signed contract copy", contact: "Priya Nair · Solace Health", type: "email", dueDate: todayAt(17), done: true },
-  ];
-
-  const sampleContacts: Contact[] = [
-    { id: crypto.randomUUID(), ownerId, name: "Sarah Mitchell", company: "Brightline Co.", email: "sarah@brightline.com", phone: "+1 415 555 0192", channel: "WhatsApp", tags: ["VIP", "Retail"], createdAt: isoDaysAgo(10) },
-    { id: crypto.randomUUID(), ownerId, name: "Marco Rossi", company: "Verde Foods", email: "marco@verdefoods.it", phone: "+39 02 5550 1843", channel: "Instagram", tags: ["New"], createdAt: isoDaysAgo(9) },
-    { id: crypto.randomUUID(), ownerId, name: "Aiko Tanaka", company: "Loop Studio", email: "aiko@loopstudio.jp", phone: "+81 3 5550 7732", channel: "TikTok", tags: ["Negotiation"], createdAt: isoDaysAgo(8) },
-    { id: crypto.randomUUID(), ownerId, name: "David Kim", company: "Northwind", email: "david@northwind.com", phone: "+1 206 555 0148", channel: "WhatsApp", tags: ["New"], createdAt: isoDaysAgo(7) },
-    { id: crypto.randomUUID(), ownerId, name: "Priya Nair", company: "Solace Health", email: "priya@solacehealth.com", phone: "+91 98765 43210", channel: "Email", tags: ["VIP", "Won"], createdAt: isoDaysAgo(6) },
-    { id: crypto.randomUUID(), ownerId, name: "Lena Fischer", company: "Orbit Labs", email: "lena@orbitlabs.de", phone: "+49 30 5550 9981", channel: "Instagram", tags: ["New"], createdAt: isoDaysAgo(5) },
-    { id: crypto.randomUUID(), ownerId, name: "Carlos Diaz", company: "Fenix Sports", email: "carlos@fenixsports.com", phone: "+34 91 555 0173", channel: "WhatsApp", tags: ["Won"], createdAt: isoDaysAgo(4) },
-    { id: crypto.randomUUID(), ownerId, name: "Omar Haddad", company: "Dune Retail", email: "omar@duneretail.ae", phone: "+971 4 555 0129", channel: "Email", tags: ["Proposal"], createdAt: isoDaysAgo(3) },
-  ];
-
-  db.leads.push(...sampleLeads);
-  db.conversations.push(...sampleConversations);
-  db.messages.push(...sampleMessages);
-  db.tasks.push(...sampleTasks);
-  db.contacts.push(...sampleContacts);
-  writeDb(db);
+  const doc = await LeadModel.create(newOrder);
+  return doc.toObject();
 }
+
+export async function getAllCorporates() {
+  await dbConnect();
+  const docs = await CorporateModel.find();
+  return docs.map((d) => d.toObject());
+}
+
+export async function createCorporateRequest(data: { companyName: string; hodEmail: string; city: string; monthlyLimitINR: number }) {
+  await dbConnect();
+  const id = `corp-${crypto.randomUUID().slice(0, 8)}`;
+  const doc = await CorporateModel.create({
+    id,
+    ...data,
+    usedAmountINR: 0,
+    verificationStatus: "pending",
+    createdAt: new Date().toISOString(),
+  });
+  return doc.toObject();
+}
+
+export async function getSimPlans(country?: string) {
+  await dbConnect();
+  const query = country ? { country: new RegExp(country, "i") } : {};
+  const docs = await SimPlanModel.find(query);
+
+  if (docs.length === 0) {
+    const seedPlans = [
+      { id: "sim-usa-1", country: "United States", planName: "USA Unlimited 30 Days", dataAllowance: "Unlimited 5G", validityDays: 30, priceINR: 2499, provider: "AT&T Partner" },
+      { id: "sim-uk-1", country: "United Kingdom", planName: "UK & Europe 12GB", dataAllowance: "12 GB 4G/5G", validityDays: 30, priceINR: 1899, provider: "O2 Europe" },
+      { id: "sim-uae-1", country: "United Arab Emirates", planName: "Dubai Tourist Pass 10GB", dataAllowance: "10 GB 5G + 100 Mins", validityDays: 15, priceINR: 2199, provider: "du Dubai" },
+      { id: "sim-sg-1", country: "Singapore", planName: "SG & SEA 20GB", dataAllowance: "20 GB High Speed", validityDays: 14, priceINR: 1499, provider: "Singtel" },
+    ];
+    await SimPlanModel.insertMany(seedPlans);
+    return seedPlans;
+  }
+
+  return docs.map((d) => d.toObject());
+}
+
+export type AdminSettings = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role?: string;
+  company?: string;
+  companyWebsite?: string;
+  companyIndustry?: string;
+  companyTimezone?: string;
+  passwordHash?: string;
+};
+
+export async function getAdminSettings(): Promise<AdminSettings> {
+  await dbConnect();
+  let doc = await AdminSettingsModel.findOne({ id: "admin_settings" });
+  if (!doc) {
+    const adminEmail = process.env.ADMIN_EMAIL || "admin@edufinservices.com";
+    doc = await AdminSettingsModel.create({
+      id: "admin_settings",
+      name: "Administrator",
+      email: adminEmail,
+      phone: "+91 98765 43210",
+      role: "Super Admin",
+      company: "EduFin Services Pvt. Ltd.",
+      companyWebsite: "https://edufinservices.com",
+      companyIndustry: "Education & Admissions CRM",
+      companyTimezone: "Asia/Kolkata (IST)",
+    });
+  }
+  return toPlain<AdminSettings>(doc);
+}
+
+export async function updateAdminSettings(updates: Record<string, any>): Promise<AdminSettings> {
+  await dbConnect();
+  await AdminSettingsModel.updateOne(
+    { id: "admin_settings" },
+    { $set: updates },
+    { upsert: true }
+  );
+  return getAdminSettings();
+}
+
+// ── Imported / Excel Leads ────────────────────────────────────────────────
+
+export async function getImportedLeads(filter?: { status?: string }): Promise<ImportedLead[]> {
+  await dbConnect();
+  const query: Record<string, any> = {};
+  if (filter?.status && filter.status !== "all") {
+    query.status = filter.status;
+  }
+  const docs = await ImportedLeadModel.find(query).sort({ uploadedAt: -1 });
+  return docs.map((d) => toPlain<ImportedLead>(d));
+}
+
+export async function createImportedLeads(
+  leads: Array<Omit<ImportedLead, "id" | "uploadedAt" | "status">>
+): Promise<{ created: ImportedLead[]; skippedCount: number; duplicates: string[] }> {
+  await dbConnect();
+  const now = new Date().toISOString();
+
+  // 1. Gather all phone numbers and names to check against database
+  const phonesToCheck = leads
+    .map((l) => String(l.phone || "").replace(/\D/g, "").slice(-10))
+    .filter((p) => p.length >= 7);
+
+  // 2. Fetch existing phones from active CRM leads
+  const existingCrmLeads = await LeadModel.find({
+    deletedAt: null,
+    phone: { $exists: true, $ne: "" },
+  }).select("phone name");
+
+  // 3. Fetch existing phones from Imported leads
+  const existingImported = await ImportedLeadModel.find({
+    phone: { $exists: true, $ne: "" },
+  }).select("phone name");
+
+  const existingPhoneSet = new Set<string>();
+  for (const l of existingCrmLeads) {
+    if (l.phone) {
+      const clean = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (clean) existingPhoneSet.add(clean);
+    }
+  }
+  for (const l of existingImported) {
+    if (l.phone) {
+      const clean = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (clean) existingPhoneSet.add(clean);
+    }
+  }
+
+  // 4. Deduplicate within the incoming batch and against DB
+  const seenInBatch = new Set<string>();
+  const docsToInsert: any[] = [];
+  const duplicates: string[] = [];
+
+  for (const lead of leads) {
+    const cleanPhone = String(lead.phone || "").replace(/\D/g, "").slice(-10);
+    const key = cleanPhone || String(lead.name || "").toLowerCase().trim();
+
+    // Check if exists in DB by phone
+    if (cleanPhone && existingPhoneSet.has(cleanPhone)) {
+      duplicates.push(`${lead.name} (${lead.rawPhone || lead.phone || "No phone"})`);
+      continue;
+    }
+
+    // Check if duplicate within the same batch
+    if (seenInBatch.has(key)) {
+      duplicates.push(`${lead.name} (${lead.rawPhone || lead.phone || "Duplicate in file"})`);
+      continue;
+    }
+
+    seenInBatch.add(key);
+    if (cleanPhone) existingPhoneSet.add(cleanPhone);
+
+    docsToInsert.push({
+      ...lead,
+      id: crypto.randomUUID(),
+      status: "pending",
+      uploadedAt: now,
+    });
+  }
+
+  if (docsToInsert.length === 0) {
+    return { created: [], skippedCount: duplicates.length, duplicates };
+  }
+
+  const created = await ImportedLeadModel.insertMany(docsToInsert);
+  return {
+    created: created.map((d) => toPlain<ImportedLead>(d)),
+    skippedCount: duplicates.length,
+    duplicates,
+  };
+}
+
+export async function assignImportedLead(
+  id: string,
+  userId: string,
+  userName: string
+): Promise<{ importedLead: ImportedLead; lead: Lead } | null> {
+  await dbConnect();
+  const doc = await ImportedLeadModel.findOne({ id });
+  if (!doc) return null;
+
+  const imp = toPlain<ImportedLead>(doc);
+  const now = new Date().toISOString();
+
+  // Create lead in CRM with initial stage
+  const createdLead = await createLead({
+    ownerId: userId,
+    name: imp.name,
+    phone: imp.phone,
+    channel: (imp.channel as Channel) || "Facebook",
+    stage: "Initial",
+    value: 0,
+    notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
+    services: [],
+  });
+
+  // Update ImportedLead record
+  await ImportedLeadModel.updateOne(
+    { id },
+    {
+      $set: {
+        status: "assigned",
+        assignedToUserId: userId,
+        assignedToUserName: userName,
+        assignedLeadId: createdLead.id,
+        assignedAt: now,
+      },
+    }
+  );
+
+  const updatedImp = await ImportedLeadModel.findOne({ id });
+  return {
+    importedLead: toPlain<ImportedLead>(updatedImp!),
+    lead: createdLead,
+  };
+}
+
+export async function bulkAssignImportedLeads(
+  ids: string[],
+  userId: string,
+  userName: string
+): Promise<{ assignedCount: number; leads: Lead[] }> {
+  await dbConnect();
+  const docs = await ImportedLeadModel.find({ id: { $in: ids } });
+  const leads: Lead[] = [];
+  const now = new Date().toISOString();
+
+  for (const doc of docs) {
+    const imp = toPlain<ImportedLead>(doc);
+    const createdLead = await createLead({
+      ownerId: userId,
+      name: imp.name,
+      phone: imp.phone,
+      channel: (imp.channel as Channel) || "Facebook",
+      stage: "Initial",
+      value: 0,
+      notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
+      services: [],
+    });
+    leads.push(createdLead);
+
+    await ImportedLeadModel.updateOne(
+      { id: imp.id },
+      {
+        $set: {
+          status: "assigned",
+          assignedToUserId: userId,
+          assignedToUserName: userName,
+          assignedLeadId: createdLead.id,
+          assignedAt: now,
+        },
+      }
+    );
+  }
+
+  return { assignedCount: leads.length, leads };
+}
+
+export async function distributeImportedLeads(
+  ids: string[],
+  users: Array<{ id: string; name: string }>
+): Promise<{ assignedCount: number; leads: Lead[] }> {
+  if (!users.length || !ids.length) return { assignedCount: 0, leads: [] };
+  await dbConnect();
+  const docs = await ImportedLeadModel.find({ id: { $in: ids } });
+  const leads: Lead[] = [];
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < docs.length; i++) {
+    const doc = docs[i];
+    const user = users[i % users.length];
+    const imp = toPlain<ImportedLead>(doc);
+
+    const createdLead = await createLead({
+      ownerId: user.id,
+      name: imp.name,
+      phone: imp.phone,
+      channel: (imp.channel as Channel) || "Facebook",
+      stage: "Initial",
+      value: 0,
+      notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
+      services: [],
+    });
+    leads.push(createdLead);
+
+    await ImportedLeadModel.updateOne(
+      { id: imp.id },
+      {
+        $set: {
+          status: "assigned",
+          assignedToUserId: user.id,
+          assignedToUserName: user.name,
+          assignedLeadId: createdLead.id,
+          assignedAt: now,
+        },
+      }
+    );
+  }
+
+  return { assignedCount: leads.length, leads };
+}
+
+export async function deleteImportedLead(id: string): Promise<void> {
+  await dbConnect();
+  await ImportedLeadModel.deleteOne({ id });
+}
+
+export async function deleteImportedLeads(ids: string[]): Promise<number> {
+  await dbConnect();
+  const res = await ImportedLeadModel.deleteMany({ id: { $in: ids } });
+  return res.deletedCount || 0;
+}
+
+// ── Automated Report Settings & Email Logs ─────────────────────────────────
+
+export async function getReportSettings(): Promise<ReportSettings> {
+  await dbConnect();
+  let doc = await ReportSettingsModel.findOne({ id: "report_settings" });
+  if (!doc) {
+    doc = await ReportSettingsModel.create({
+      id: "report_settings",
+      dailyEnabled: true,
+      weeklyEnabled: true,
+      dailyReportTime: "20:00",
+      weeklyReportDay: 0,
+      lastDailySentAt: null,
+      lastWeeklySentAt: null,
+      recipientEmails: [],
+      customRecipientEmail: "",
+    });
+  }
+  const plain = toPlain<ReportSettings>(doc);
+  // Ensure recipientEmails is an array of unique, trimmed email strings
+  let emails: string[] = [];
+  if (Array.isArray(plain.recipientEmails) && plain.recipientEmails.length > 0) {
+    emails = plain.recipientEmails
+      .flatMap((e) => (typeof e === "string" ? e.split(",") : []))
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.length > 0 && e.includes("@"));
+  }
+  if (emails.length === 0 && plain.customRecipientEmail?.trim()) {
+    emails = plain.customRecipientEmail
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.length > 0 && e.includes("@"));
+  }
+  plain.recipientEmails = Array.from(new Set(emails));
+  return plain;
+}
+
+export function getRecipientsFromSettings(settings: ReportSettings): string[] {
+  const list = (settings.recipientEmails ?? [])
+    .flatMap((e) => (typeof e === "string" ? e.split(",") : []))
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0 && e.includes("@"));
+  if (list.length === 0 && settings.customRecipientEmail?.trim()) {
+    list.push(
+      ...settings.customRecipientEmail
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.length > 0 && e.includes("@"))
+    );
+  }
+  return Array.from(new Set(list));
+}
+
+export async function updateReportSettings(updates: Partial<ReportSettings>): Promise<ReportSettings> {
+  await dbConnect();
+  await ReportSettingsModel.updateOne(
+    { id: "report_settings" },
+    { $set: updates },
+    { upsert: true }
+  );
+  return getReportSettings();
+}
+
+/**
+ * Atomically claims the daily automated cron slot for today's IST schedule (slotKey).
+ * Returns true if this invocation successfully acquired the lock, false if already claimed.
+ */
+export async function claimDailyCronSlot(slotKey: string): Promise<boolean> {
+  await dbConnect();
+  await getReportSettings();
+  const res = await ReportSettingsModel.findOneAndUpdate(
+    {
+      id: "report_settings",
+      lastDailyCronDate: { $ne: slotKey },
+    },
+    {
+      $set: {
+        lastDailyCronDate: slotKey,
+        lastDailySentAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: "after" }
+  );
+  return !!res;
+}
+
+/**
+ * Atomically claims the weekly automated cron slot for this week's IST schedule (slotKey).
+ * Returns true if this invocation successfully acquired the lock, false if already claimed.
+ */
+export async function claimWeeklyCronSlot(slotKey: string): Promise<boolean> {
+  await dbConnect();
+  await getReportSettings();
+  const res = await ReportSettingsModel.findOneAndUpdate(
+    {
+      id: "report_settings",
+      lastWeeklyCronDate: { $ne: slotKey },
+    },
+    {
+      $set: {
+        lastWeeklyCronDate: slotKey,
+        lastWeeklySentAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: "after" }
+  );
+  return !!res;
+}
+
+export async function logEmailReport(report: Omit<EmailReportLog, "id">): Promise<EmailReportLog> {
+  await dbConnect();
+  const entry: EmailReportLog = {
+    ...report,
+    id: crypto.randomUUID(),
+  };
+  await EmailReportLogModel.create(entry);
+  return entry;
+}
+
+export async function getEmailReportLogs(limit = 50): Promise<EmailReportLog[]> {
+  await dbConnect();
+  const docs = await EmailReportLogModel.find().sort({ sentAt: -1 }).limit(limit);
+  return docs.map((d) => toPlain<EmailReportLog>(d));
+}
+

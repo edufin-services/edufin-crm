@@ -2,25 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { SearchIcon, FunnelIcon, UsersIcon, ChatIcon } from "./icons";
 import type { SearchResult } from "@/app/api/search/route";
 
-const typeIcon: Record<SearchResult["type"], React.ReactNode> = {
-  lead: <FunnelIcon />,
-  contact: <UsersIcon />,
-  conversation: <ChatIcon />,
+const badgeStyle: Record<SearchResult["type"], string> = {
+  lead: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  contact: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  conversation: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
-const typeStyle: Record<SearchResult["type"], string> = {
-  lead: "bg-brand-50 text-brand-600",
-  contact: "bg-indigo-50 text-indigo-600",
-  conversation: "bg-blue-50 text-blue-600",
-};
-
-const typeLabel: Record<SearchResult["type"], string> = {
+const badgeLabel: Record<SearchResult["type"], string> = {
   lead: "Lead",
   contact: "Contact",
-  conversation: "Conversation",
+  conversation: "Chat",
 };
 
 export default function GlobalSearch() {
@@ -55,55 +48,66 @@ export default function GlobalSearch() {
         .then((data) => setResults(data.results ?? []))
         .catch(() => setResults([]))
         .finally(() => setLoading(false));
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timeout);
   }, [query]);
 
   return (
-    <div className="relative hidden flex-1 max-w-md sm:block" ref={ref}>
-      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-zinc-400">
-        <SearchIcon />
+    <div className="relative flex-1 max-w-md" ref={ref}>
+      <div className="flex items-center gap-2 rounded-full border border-zinc-200/80 bg-zinc-50/70 px-3.5 py-1.5 text-zinc-400 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 transition-all shadow-2xs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="flex-none">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
+        </svg>
         <input
           type="text"
           placeholder="Search leads, contacts, chats..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
-          className="w-full bg-transparent text-sm text-zinc-700 placeholder:text-zinc-400 focus:outline-none"
+          className="w-full bg-transparent text-xs text-zinc-800 placeholder:text-zinc-400 focus:outline-none"
         />
+        {query && (
+          <button
+            onClick={() => setQuery("")}
+            className="flex-none text-zinc-400 hover:text-zinc-600 text-xs font-semibold"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {open && query.trim() && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-full rounded-xl border border-zinc-200 bg-white shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-2 w-full rounded-2xl border border-zinc-200/90 bg-white shadow-xl overflow-hidden">
           {loading ? (
-            <p className="px-4 py-6 text-center text-sm text-zinc-400">Searching...</p>
+            <div className="flex items-center justify-center gap-2 px-4 py-6 text-xs text-zinc-400">
+              <div className="h-3 w-3 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+              Searching leads, contacts & chats...
+            </div>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-zinc-400">No results found.</p>
+            <p className="px-4 py-6 text-center text-xs text-zinc-400">No matching leads, contacts, or chats found.</p>
           ) : (
-            <ul className="max-h-96 overflow-y-auto py-1">
+            <div className="max-h-96 overflow-y-auto divide-y divide-zinc-50 py-1">
               {results.map((r) => (
-                <li key={`${r.type}-${r.id}`}>
-                  <Link
-                    href={r.href}
-                    onClick={() => {
-                      setOpen(false);
-                      setQuery("");
-                    }}
-                    className="flex items-start gap-3 px-4 py-2.5 hover:bg-zinc-50"
-                  >
-                    <span className={`flex h-8 w-8 flex-none items-center justify-center rounded-full ${typeStyle[r.type]}`}>
-                      {typeIcon[r.type]}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-zinc-900">{r.title}</p>
-                      <p className="truncate text-xs text-zinc-500">{r.subtitle}</p>
-                    </div>
-                    <span className="flex-none text-[11px] text-zinc-400">{typeLabel[r.type]}</span>
-                  </Link>
-                </li>
+                <Link
+                  key={`${r.type}-${r.id}`}
+                  href={r.href}
+                  onClick={() => {
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-zinc-900">{r.title}</p>
+                    <p className="truncate text-[11px] text-zinc-500 mt-0.5">{r.subtitle}</p>
+                  </div>
+                  <span className={`flex-none rounded-full border px-2 py-0.5 text-[10px] font-bold ${badgeStyle[r.type]}`}>
+                    {badgeLabel[r.type]}
+                  </span>
+                </Link>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       )}

@@ -6,7 +6,8 @@ const secretKey = process.env.SESSION_SECRET || "dev-only-insecure-secret-change
 const encodedKey = new TextEncoder().encode(secretKey);
 
 export type SessionPayload = {
-  userId: string;
+  userId?: string;
+  isAdmin?: boolean;
   expiresAt: number;
 };
 
@@ -32,6 +33,20 @@ export async function decrypt(session: string | undefined = "") {
 export async function createSession(userId: string) {
   const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
   const session = await encrypt({ userId, expiresAt });
+  const cookieStore = await cookies();
+
+  cookieStore.set("session", session, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    expires: new Date(expiresAt),
+    sameSite: "lax",
+    path: "/",
+  });
+}
+
+export async function createAdminSession() {
+  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const session = await encrypt({ isAdmin: true, expiresAt });
   const cookieStore = await cookies();
 
   cookieStore.set("session", session, {

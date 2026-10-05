@@ -8,7 +8,13 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = getUserById(session.userId);
+  const [user, channels, notificationPrefs, teamMembers] = await Promise.all([
+    getUserById(session.userId),
+    getUserChannels(session.userId),
+    getNotificationPrefs(session.userId),
+    getTeamMembers(session.userId),
+  ]);
+
   if (!user) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
@@ -18,6 +24,9 @@ export async function GET() {
       name: user.name,
       email: user.email,
       phone: user.phone ?? "",
+      isLeadPaused: !!user.isLeadPaused,
+      leadPauseReason: user.leadPauseReason || "",
+      leadPausedAt: user.leadPausedAt || "",
     },
     company: {
       company: user.company,
@@ -25,9 +34,9 @@ export async function GET() {
       companyIndustry: user.companyIndustry ?? "",
       companyTimezone: user.companyTimezone ?? "",
     },
-    channels: getUserChannels(session.userId),
-    notificationPrefs: getNotificationPrefs(session.userId),
-    teamMembers: getTeamMembers(session.userId),
+    channels,
+    notificationPrefs,
+    teamMembers,
   });
 }
 
@@ -38,33 +47,52 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  const { name, email, phone } = body ?? {};
-
-  const updates: Partial<{ name: string; email: string; phone: string }> = {};
+  const { name, email, phone, isLeadPaused, leadPauseReason } = body ?? {};
+  const updates: Partial<{
+    name: string;
+    email: string;
+    phone: string;
+    isLeadPaused: boolean;
+    leadPauseReason: string;
+    leadPausedAt: string;
+  }> = {};
 
   if (name !== undefined) {
-    if (typeof name !== "string" || !name.trim()) {
-      return NextResponse.json({ error: "Invalid name." }, { status: 400 });
-    }
+    if (typeof name !== "string" || !name.trim()) return NextResponse.json({ error: "Invalid name." }, { status: 400 });
     updates.name = name.trim();
   }
   if (email !== undefined) {
-    if (typeof email !== "string" || !email.trim()) {
-      return NextResponse.json({ error: "Invalid email." }, { status: 400 });
-    }
+    if (typeof email !== "string" || !email.trim()) return NextResponse.json({ error: "Invalid email." }, { status: 400 });
     updates.email = email.trim();
   }
   if (phone !== undefined) {
-    if (typeof phone !== "string") {
-      return NextResponse.json({ error: "Invalid phone." }, { status: 400 });
-    }
+    if (typeof phone !== "string") return NextResponse.json({ error: "Invalid phone." }, { status: 400 });
     updates.phone = phone.trim();
   }
-
-  const user = updateUserProfile(session.userId, updates);
-  if (!user) {
-    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  if (typeof isLeadPaused === "boolean") {
+    updates.isLeadPaused = isLeadPaused;
+    if (isLeadPaused) {
+      updates.leadPauseReason = typeof leadPauseReason === "string" ? leadPauseReason.trim() : "";
+      updates.leadPausedAt = new Date().toISOString();
+    } else {
+      updates.leadPauseReason = "";
+      updates.leadPausedAt = "";
+    }
+  } else if (typeof leadPauseReason === "string") {
+    updates.leadPauseReason = leadPauseReason.trim();
   }
 
-  return NextResponse.json({ profile: { name: user.name, email: user.email, phone: user.phone ?? "" } });
+  const user = await updateUserProfile(session.userId, updates);
+  if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+  return NextResponse.json({
+    profile: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone ?? "",
+      isLeadPaused: !!user.isLeadPaused,
+      leadPauseReason: user.leadPauseReason || "",
+      leadPausedAt: user.leadPausedAt || "",
+    },
+  });
 }

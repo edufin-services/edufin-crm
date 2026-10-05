@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "New password must be at least 8 characters." }, { status: 400 });
   }
 
-  const user = getUserById(session.userId);
+  const user = await getUserById(session.userId);
   if (!user) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
@@ -30,7 +30,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  updateUserPassword(session.userId, passwordHash);
+  await updateUserPassword(session.userId, passwordHash);
 
   return NextResponse.json({ success: true });
 }

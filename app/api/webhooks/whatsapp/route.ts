@@ -4,6 +4,7 @@ import {
   createConversation,
   createLead,
   createMessage,
+  getAllUsers,
   getConversationByWhatsappId,
   getLeadByWhatsappId,
   getUserById,
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const appSecret = process.env.WHATSAPP_APP_SECRET ?? "";
-  const ownerId = process.env.WHATSAPP_OWNER_ID ?? "";
+  let ownerId = process.env.WHATSAPP_OWNER_ID ?? "";
   const signature = request.headers.get("x-hub-signature-256");
 
   // Verify signature when secret is configured
@@ -49,7 +50,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  if (!ownerId || !getUserById(ownerId)) {
+  // Resolve ownerId gracefully
+  const existingOwner = ownerId ? await getUserById(ownerId) : null;
+  if (!existingOwner || existingOwner.isLeadPaused) {
+    const users = await getAllUsers();
+    const activeUsers = users.filter((u) => !u.isLeadPaused);
+    if (activeUsers.length > 0) {
+      ownerId = activeUsers[0].id;
+    } else if (users.length > 0) {
+      ownerId = users[0].id;
+    }
+  }
+
+  if (!ownerId) {
     console.error("WhatsApp webhook: WHATSAPP_OWNER_ID is missing or invalid");
     return NextResponse.json({ error: "Owner not configured" }, { status: 500 });
   }
@@ -79,30 +92,30 @@ export async function POST(request: NextRequest) {
       }
 
       for (const msg of messages) {
-        if (msg.type !== "text") continue;
-
         const waId = msg.from;
+        if (!waId) continue;
+
         const senderName = contactsMap[waId] ?? `+${waId}`;
-        const text = msg.text?.body ?? "";
+        const text = msg.text?.body ?? msg.caption ?? (msg.type ? `[${msg.type} message]` : "New WhatsApp message");
         const now = new Date().toISOString();
 
         // Create lead if this is the first message from this number
-        if (!getLeadByWhatsappId(ownerId, waId)) {
-          createLead({
+        if (!(await getLeadByWhatsappId(ownerId, waId))) {
+          await createLead({
             ownerId,
             name: senderName,
-            company: `WhatsApp +${waId}`,
             channel: "WhatsApp",
             value: 0,
-            stage: "Initial Contact",
+            stage: "Initial",
             whatsappId: waId,
+            phone: `+${waId}`,
           });
         }
 
         // Create or reuse conversation thread
-        let conversation = getConversationByWhatsappId(ownerId, waId);
+        let conversation = await getConversationByWhatsappId(ownerId, waId);
         if (!conversation) {
-          conversation = createConversation({
+          conversation = await createConversation({
             ownerId,
             name: senderName,
             company: `WhatsApp +${waId}`,
@@ -115,7 +128,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Append the message to the conversation
-        createMessage(conversation.id, ownerId, "them", text);
+        await createMessage(conversation.id, ownerId, "them", text);
       }
     }
   }
@@ -142,6 +155,7 @@ type WhatsAppPayload = {
           timestamp: string;
           type: string;
           text?: { body: string };
+          caption?: string;
         }>;
       };
     }>;

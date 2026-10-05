@@ -15,6 +15,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Invalid channel update." }, { status: 400 });
   }
 
-  const channels = setUserChannel(session.userId, channel, connected);
+  const channels = await setUserChannel(session.userId, channel, connected);
   return NextResponse.json({ channels });
 }

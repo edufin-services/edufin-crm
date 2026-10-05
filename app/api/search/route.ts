@@ -23,19 +23,25 @@ export async function GET(request: NextRequest) {
 
   const results: SearchResult[] = [];
 
-  for (const lead of getLeadsByOwner(session.userId)) {
-    if (lead.name.toLowerCase().includes(query) || lead.company.toLowerCase().includes(query)) {
+  const [leads, contacts, conversations] = await Promise.all([
+    getLeadsByOwner(session.userId),
+    getContactsByOwner(session.userId),
+    getConversationsByOwner(session.userId),
+  ]);
+
+  for (const lead of leads) {
+    if (lead.name.toLowerCase().includes(query)) {
       results.push({
         id: lead.id,
         type: "lead",
         title: lead.name,
-        subtitle: `${lead.company} · ${lead.stage}`,
-        href: "/dashboard/leads",
+        subtitle: `${lead.channel} · ${lead.stage}`,
+        href: `/dashboard/leads?leadId=${lead.id}`,
       });
     }
   }
 
-  for (const contact of getContactsByOwner(session.userId)) {
+  for (const contact of contacts) {
     if (
       contact.name.toLowerCase().includes(query) ||
       contact.company.toLowerCase().includes(query) ||
@@ -51,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  for (const conversation of getConversationsByOwner(session.userId)) {
+  for (const conversation of conversations) {
     if (
       conversation.name.toLowerCase().includes(query) ||
       conversation.company.toLowerCase().includes(query) ||

@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/conver
   const { id } = await ctx.params;
   const body = await request.json().catch(() => null);
   if (body?.unread === 0) {
-    markConversationRead(id, session.userId);
+    await markConversationRead(id, session.userId);
   }
 
   return NextResponse.json({ success: true });

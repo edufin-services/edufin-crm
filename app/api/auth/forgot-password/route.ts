@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createResetToken, getUserByEmail } from "@/lib/db";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -9,14 +10,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Please enter your email address." }, { status: 400 });
   }
 
-  const user = getUserByEmail(email);
+  try {
+    const user = await getUserByEmail(email);
 
-  // Always respond with success to avoid revealing whether an account exists.
-  if (user) {
-    const { token } = createResetToken(user.id);
-    const resetUrl = `${request.nextUrl.origin}/reset-password?token=${token}`;
-    // No email provider configured yet — log the reset link for development.
-    console.log(`[forgot-password] Reset link for ${user.email}: ${resetUrl}`);
+    if (user) {
+      const { token } = await createResetToken(user.id);
+      const resetUrl = `${request.nextUrl.origin}/reset-password?token=${token}`;
+      console.log(`[forgot-password] Reset link for ${user.email}: ${resetUrl}`);
+      await sendPasswordResetEmail(user.email, resetUrl);
+    }
+  } catch (err) {
+    console.error("[forgot-password] Error processing reset request:", err);
   }
 
   return NextResponse.json({ success: true });

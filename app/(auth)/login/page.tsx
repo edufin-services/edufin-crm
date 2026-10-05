@@ -31,7 +31,11 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      if (data.isAdmin) {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -42,20 +46,20 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-zinc-900">Welcome back</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Log in to your account to keep growing your sales.
+      <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Welcome back</h1>
+      <p className="mt-1.5 text-sm text-zinc-500">
+        Log in to your account to manage education leads &amp; admissions.
       </p>
 
       {error && (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+      <form onSubmit={handleSubmit} className="mt-7 space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="email" className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider">
             Email address
           </label>
           <input
@@ -64,17 +68,17 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            placeholder="you@edufinservices.com"
+            className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between">
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
+            <label htmlFor="password" className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider">
               Password
             </label>
-            <Link href="/forgot-password" className="text-sm font-medium text-brand-600 hover:text-brand-500">
+            <Link href="/forgot-password" className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">
               Forgot password?
             </Link>
           </div>
@@ -86,7 +90,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 pr-10 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3.5 py-2.5 pr-10 text-sm text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all"
             />
             <button
               type="button"
@@ -99,26 +103,19 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-zinc-600">
-          <input type="checkbox" className="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-500" />
+        <label className="flex items-center gap-2 text-xs font-medium text-zinc-600">
+          <input type="checkbox" className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500" />
           Keep me signed in
         </label>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
-
-      <p className="mt-8 text-center text-sm text-zinc-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="font-medium text-brand-600 hover:text-brand-500">
-          Sign up for free
-        </Link>
-      </p>
     </div>
   );
 }

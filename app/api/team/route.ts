@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teamMembers = getTeamMembers(session.userId);
+  const teamMembers = await getTeamMembers(session.userId);
   return NextResponse.json({ teamMembers });
 }
 
@@ -32,6 +32,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Please fill in all fields with valid values." }, { status: 400 });
   }
 
-  const member = createTeamMember({ ownerId: session.userId, name: name.trim(), email: email.trim(), role: role.trim() });
+  const member = await createTeamMember({ ownerId: session.userId, name: name.trim(), email: email.trim(), role: role.trim() });
   return NextResponse.json({ member });
 }

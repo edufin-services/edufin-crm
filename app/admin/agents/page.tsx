@@ -1,0 +1,915 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { DEFAULT_USER_PASSWORD, BRANCHES } from "@/lib/constants";
+
+type Agent = {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  branchId?: string;
+  branchName?: string;
+  createdAt: string;
+  isLeadPaused?: boolean;
+  leadPauseReason?: string;
+  leadPausedAt?: string;
+};
+
+const GRADIENTS: Record<string, string> = {
+  A:"from-rose-400 to-rose-600",B:"from-pink-400 to-pink-600",C:"from-fuchsia-400 to-fuchsia-600",
+  D:"from-violet-400 to-violet-600",E:"from-indigo-400 to-indigo-600",F:"from-blue-400 to-blue-600",
+  G:"from-sky-400 to-sky-600",H:"from-cyan-400 to-cyan-600",I:"from-teal-400 to-teal-600",
+  J:"from-emerald-400 to-emerald-600",K:"from-green-400 to-green-600",L:"from-lime-400 to-lime-600",
+  M:"from-amber-400 to-amber-600",N:"from-orange-400 to-orange-600",O:"from-red-400 to-red-600",
+  P:"from-rose-400 to-rose-600",Q:"from-purple-400 to-purple-600",R:"from-blue-400 to-blue-600",
+  S:"from-sky-400 to-sky-600",T:"from-teal-400 to-teal-600",U:"from-cyan-400 to-cyan-600",
+  V:"from-violet-400 to-violet-600",W:"from-fuchsia-400 to-fuchsia-600",X:"from-indigo-400 to-indigo-600",
+  Y:"from-amber-400 to-amber-600",Z:"from-orange-400 to-orange-600",
+};
+const grad = (name: string) => GRADIENTS[name[0]?.toUpperCase() ?? "A"] ?? "from-zinc-400 to-zinc-600";
+const initials = (name: string) => name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+
+export default function AdminAgentsPage() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editAgent, setEditAgent] = useState<Agent | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteName, setDeleteName] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
+  const [pauseTarget, setPauseTarget] = useState<Agent | null>(null);
+  const [pauseReason, setPauseReason] = useState("On Leave");
+  const [pauseSubmitting, setPauseSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/agents")
+      .then((r) => r.json())
+      .then((d) => setAgents(d.agents ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredAgents = useMemo(() => {
+    let list = agents;
+    if (statusFilter === "active") list = list.filter((a) => !a.isLeadPaused);
+    if (statusFilter === "paused") list = list.filter((a) => a.isLeadPaused);
+
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.email.toLowerCase().includes(q) ||
+        a.company.toLowerCase().includes(q) ||
+        (a.branchName && a.branchName.toLowerCase().includes(q)) ||
+        (a.leadPauseReason && a.leadPauseReason.toLowerCase().includes(q))
+    );
+  }, [agents, query, statusFilter]);
+
+  async function handleCreate(data: {
+    name: string;
+    company: string;
+    email: string;
+    password: string;
+    branchId: string;
+    branchName: string;
+    isLeadPaused?: boolean;
+    leadPauseReason?: string;
+  }) {
+    const res = await fetch("/api/admin/agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      setAgents((prev) => [...prev, body.agent]);
+      setShowModal(false);
+    }
+    return body;
+  }
+
+  async function handleUpdate(
+    id: string,
+    data: {
+      name: string;
+      company: string;
+      email: string;
+      password?: string;
+      branchId?: string;
+      branchName?: string;
+      isLeadPaused?: boolean;
+      leadPauseReason?: string;
+    }
+  ) {
+    const res = await fetch(`/api/admin/agents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const body = await res.json();
+    if (res.ok && body.agent) {
+      setAgents((prev) => prev.map((a) => (a.id === id ? body.agent : a)));
+      setEditAgent(null);
+    }
+    return body;
+  }
+
+  async function handleResume(agent: Agent) {
+    const res = await fetch(`/api/admin/agents/${agent.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isLeadPaused: false }),
+    });
+    const body = await res.json();
+    if (res.ok && body.agent) {
+      setAgents((prev) => prev.map((a) => (a.id === agent.id ? body.agent : a)));
+    }
+  }
+
+  async function handleConfirmPause() {
+    if (!pauseTarget) return;
+    setPauseSubmitting(true);
+    const res = await fetch(`/api/admin/agents/${pauseTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        isLeadPaused: true,
+        leadPauseReason: pauseReason.trim() || "Manual Pause",
+      }),
+    });
+    const body = await res.json();
+    setPauseSubmitting(false);
+    if (res.ok && body.agent) {
+      setAgents((prev) => prev.map((a) => (a.id === pauseTarget.id ? body.agent : a)));
+      setPauseTarget(null);
+      setPauseReason("On Leave");
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteId) return;
+    setAgents((prev) => prev.filter((a) => a.id !== deleteId));
+    await fetch(`/api/admin/agents/${deleteId}`, { method: "DELETE" });
+    setDeleteId(null);
+    setDeleteName("");
+  }
+
+  return (
+    <div className="space-y-5 max-w-5xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-zinc-900 tracking-tight">Users</h1>
+          <p className="mt-0.5 text-sm text-zinc-400">
+            {loading ? "Loading..." : `${agents.length} registered user account${agents.length !== 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-400 active:scale-95 transition-all"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 5v14M5 12h14" strokeLinecap="round"/>
+          </svg>
+          Create User
+        </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 shadow-xs w-full max-w-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 flex-none">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search users by name, email, or branch..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full bg-transparent text-sm text-zinc-700 placeholder:text-zinc-400 focus:outline-none"
+          />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl border border-zinc-200/60 shadow-2xs">
+          <button
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              statusFilter === "all" ? "bg-white text-zinc-900 shadow-2xs" : "text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            All Users ({agents.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter("active")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              statusFilter === "active" ? "bg-emerald-600 text-white shadow-2xs" : "text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === "active" ? "bg-white" : "bg-emerald-500"}`} />
+            Receiving Leads ({agents.filter((a) => !a.isLeadPaused).length})
+          </button>
+          <button
+            onClick={() => setStatusFilter("paused")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              statusFilter === "paused" ? "bg-amber-500 text-white shadow-2xs" : "text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === "paused" ? "bg-white" : "bg-amber-500"}`} />
+            Paused ({agents.filter((a) => a.isLeadPaused).length})
+          </button>
+        </div>
+      </div>
+
+      {/* Table card */}
+      <div className="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden shadow-xs">
+        {/* Header row */}
+        <div className="grid grid-cols-[1.8fr_1.3fr_1.3fr_1fr_250px] gap-4 px-5 py-3 bg-zinc-50/80 border-b border-zinc-100 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+          <span>User</span>
+          <span>Company &amp; Branch</span>
+          <span>Lead Directing</span>
+          <span>Joined</span>
+          <span className="text-right">Actions</span>
+        </div>
+
+        {/* Skeleton rows */}
+        {loading && [...Array(4)].map((_, i) => (
+          <div key={i} className="grid grid-cols-[1.8fr_1.3fr_1.3fr_1fr_250px] gap-4 px-5 py-4 border-b border-zinc-50 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full bg-zinc-200 flex-none" />
+              <div className="space-y-1.5">
+                <div className="h-3 w-24 rounded bg-zinc-200" />
+                <div className="h-2.5 w-32 rounded bg-zinc-100" />
+              </div>
+            </div>
+            <div className="h-3 w-20 rounded bg-zinc-100 self-center" />
+            <div className="h-3 w-24 rounded bg-zinc-100 self-center" />
+            <div className="h-3 w-16 rounded bg-zinc-100 self-center" />
+            <div />
+          </div>
+        ))}
+
+        {/* Empty state */}
+        {!loading && filteredAgents.length === 0 && (
+          <div className="flex flex-col items-center py-16">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 mb-3">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-400">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-zinc-600">
+              {agents.length === 0 ? "No users yet" : "No users match your criteria"}
+            </p>
+            {agents.length === 0 && (
+              <button onClick={() => setShowModal(true)} className="mt-3 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                + Create first user
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Data rows */}
+        {!loading && filteredAgents.map((agent, idx) => {
+          const isKolkata = (agent.branchName || "").toLowerCase().includes("kolkata");
+          return (
+            <div
+              key={agent.id}
+              className="grid grid-cols-[1.8fr_1.3fr_1.3fr_1fr_250px] gap-4 px-5 py-3.5 items-center hover:bg-zinc-50/60 transition-colors group"
+              style={{ borderBottom: idx < filteredAgents.length - 1 ? "1px solid #f4f4f5" : "none" }}
+            >
+              <Link href={`/admin/agents/${agent.id}`} className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br ${grad(agent.name)} text-[10px] font-bold text-white shadow-sm`}>
+                  {initials(agent.name)}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900 group-hover:text-emerald-600 transition-colors leading-tight">{agent.name}</p>
+                  <p className="text-xs text-zinc-400">{agent.email}</p>
+                </div>
+              </Link>
+              <div>
+                <p className="text-sm text-zinc-700 font-medium">{agent.company || "—"}</p>
+                <div className="mt-0.5">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    isKolkata
+                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isKolkata ? "bg-purple-500" : "bg-blue-500"}`} />
+                    {agent.branchName || "Delhi NCR Branch"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lead Directing Status Badge */}
+              <div>
+                {agent.isLeadPaused ? (
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/90 shadow-2xs">
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16" rx="1" />
+                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                      </svg>
+                      Directing Paused
+                    </span>
+                    {agent.leadPauseReason && (
+                      <p className="text-[10px] text-zinc-400 mt-0.5 font-medium truncate max-w-[150px]" title={agent.leadPauseReason}>
+                        {agent.leadPauseReason}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200/90 shadow-2xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Receiving Leads
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-400">
+                {new Date(agent.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 justify-end">
+                {agent.isLeadPaused ? (
+                  <button
+                    onClick={() => handleResume(agent)}
+                    className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                    title="Resume directing leads to this user"
+                    aria-label="Resume Leads"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setPauseTarget(agent);
+                      setPauseReason("On Leave");
+                    }}
+                    className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 text-amber-800 hover:bg-amber-100 hover:border-amber-300 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                    title="Pause directing leads to this user"
+                    aria-label="Pause Leads"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                      <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                    </svg>
+                  </button>
+                )}
+
+                <Link
+                  href={`/admin/agents/${agent.id}`}
+                  className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                  title="View User Leads & Pipeline"
+                  aria-label="View User"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </Link>
+
+                <button
+                  onClick={() => setEditAgent(agent)}
+                  className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                  title="Edit User Details"
+                  aria-label="Edit User"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => { setDeleteId(agent.id); setDeleteName(agent.name); }}
+                  className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                  title="Delete User"
+                  aria-label="Delete User"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Footer */}
+        {!loading && filteredAgents.length > 0 && (
+          <div className="border-t border-zinc-50 px-5 py-2.5 text-xs text-zinc-400 flex items-center justify-between">
+            <span>{filteredAgents.length} user{filteredAgents.length !== 1 ? "s" : ""} shown</span>
+            <span>{agents.filter((a) => !a.isLeadPaused).length} receiving leads · {agents.filter((a) => a.isLeadPaused).length} paused</span>
+          </div>
+        )}
+      </div>
+
+      {/* Create Modal */}
+      {showModal && (
+        <CreateAgentModal onClose={() => setShowModal(false)} onCreate={handleCreate} />
+      )}
+
+      {/* Edit Modal */}
+      {editAgent && (
+        <EditAgentModal
+          agent={editAgent}
+          onClose={() => setEditAgent(null)}
+          onUpdate={handleUpdate}
+        />
+      )}
+
+      {/* Pause Directing Leads Modal */}
+      {pauseTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPauseTarget(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5 mb-4">
+              <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-amber-50 border border-amber-200 text-amber-600">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1"/>
+                  <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Pause Directing Leads to {pauseTarget.name}?</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  When paused, this user will NOT be assigned incoming leads from Meta Ads, webhooks, or round-robin distribution.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-zinc-600 uppercase tracking-wide mb-1.5">
+                  Select Reason (Optional)
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {["On Leave", "Shift Ended", "Lunch Break", "Overloaded / Catching Up", "Training"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setPauseReason(preset)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-semibold border transition-all cursor-pointer ${
+                        pauseReason === preset
+                          ? "bg-amber-100 text-amber-900 border-amber-300 shadow-2xs"
+                          : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={pauseReason}
+                  onChange={(e) => setPauseReason(e.target.value)}
+                  placeholder="Or type custom reason (e.g., Doctor appointment)..."
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-amber-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPauseTarget(null)}
+                className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-xs font-bold text-zinc-600 hover:bg-zinc-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={pauseSubmitting}
+                onClick={handleConfirmPause}
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 py-2.5 text-xs font-bold text-white hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 shadow-md shadow-amber-600/20 transition-all cursor-pointer"
+              >
+                {pauseSubmitting ? "Pausing..." : "Pause Directing Leads"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => { setDeleteId(null); setDeleteName(""); }}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 border border-red-100">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <h2 className="text-base font-bold text-zinc-900">Delete {deleteName}?</h2>
+            <p className="mt-1.5 text-sm text-zinc-500">
+              This permanently deletes the user account. Their leads will remain in the system.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => { setDeleteId(null); setDeleteName(""); }}
+                className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition-colors shadow-sm">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateAgentModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (data: {
+    name: string;
+    company: string;
+    email: string;
+    password: string;
+    branchId: string;
+    branchName: string;
+  }) => Promise<{ error?: string }>;
+}) {
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [branchId, setBranchId] = useState<string>(BRANCHES[0].id);
+  const [password, setPassword] = useState(DEFAULT_USER_PASSWORD);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    const chosenBranch = BRANCHES.find((b) => b.id === branchId) || BRANCHES[0];
+    const result = await onCreate({
+      name,
+      company,
+      email,
+      password,
+      branchId: chosenBranch.id,
+      branchName: chosenBranch.name,
+    });
+    setSaving(false);
+    if (result.error) setError(result.error);
+  }
+
+  const inputCls = "w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-colors";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-zinc-200/80 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900">Create User</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">User will be assigned to branch with round-robin lead allocation</p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{error}</div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Full Name *</label>
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className={inputCls} />
+            </div>
+            <div>
+              <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Company *</label>
+              <input required value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme Inc." className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email Address *</label>
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@acme.com" className={inputCls} />
+          </div>
+          <div>
+            <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Branch *</label>
+            <select
+              required
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className={inputCls}
+            >
+              {BRANCHES.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.city})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-zinc-400">
+              Multiple users in the same branch receive incoming leads via round-robin.
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Password *</label>
+              <button
+                type="button"
+                onClick={() => { setPassword(DEFAULT_USER_PASSWORD); setShowPassword(true); }}
+                className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors"
+              >
+                Use default ({DEFAULT_USER_PASSWORD})
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                required minLength={8}
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                className={`${inputCls} pr-10`}
+              />
+              <button type="button" onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600">
+                {showPassword ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] text-zinc-400">
+              Default password is <span className="font-mono font-medium text-emerald-700">{DEFAULT_USER_PASSWORD}</span> until changed.
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 py-2.5 text-sm font-bold text-white hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 shadow-sm shadow-emerald-600/20 transition-all">
+              {saving ? "Creating..." : "Create User"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditAgentModal({
+  agent,
+  onClose,
+  onUpdate,
+}: {
+  agent: Agent;
+  onClose: () => void;
+  onUpdate: (id: string, data: {
+    name: string;
+    company: string;
+    email: string;
+    password?: string;
+    branchId?: string;
+    branchName?: string;
+    isLeadPaused?: boolean;
+    leadPauseReason?: string;
+  }) => Promise<{ error?: string }>;
+}) {
+  const [name, setName] = useState(agent.name);
+  const [company, setCompany] = useState(agent.company);
+  const [email, setEmail] = useState(agent.email);
+  const [branchId, setBranchId] = useState(
+    agent.branchId || (agent.branchName?.toLowerCase().includes("kolkata") ? "br-kolkata-01" : "br-delhi-01")
+  );
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLeadPaused, setIsLeadPaused] = useState(Boolean(agent.isLeadPaused));
+  const [leadPauseReason, setLeadPauseReason] = useState(agent.leadPauseReason || "On Leave");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    const chosenBranch = BRANCHES.find((b) => b.id === branchId) || BRANCHES[0];
+    const payload: {
+      name: string;
+      company: string;
+      email: string;
+      password?: string;
+      branchId: string;
+      branchName: string;
+      isLeadPaused: boolean;
+      leadPauseReason: string;
+    } = {
+      name: name.trim(),
+      company: company.trim(),
+      email: email.trim(),
+      branchId: chosenBranch.id,
+      branchName: chosenBranch.name,
+      isLeadPaused,
+      leadPauseReason: isLeadPaused ? leadPauseReason.trim() : "",
+    };
+    if (password.trim()) {
+      payload.password = password.trim();
+    }
+    const result = await onUpdate(agent.id, payload);
+    setSaving(false);
+    if (result.error) setError(result.error);
+  }
+
+  const inputCls = "w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-colors";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-zinc-200/80 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900">Edit User</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Update branch attribution, lead directing status, and credentials</p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{error}</div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Full Name *</label>
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className={inputCls} />
+            </div>
+            <div>
+              <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Company *</label>
+              <input required value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme Inc." className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email Address *</label>
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@acme.com" className={inputCls} />
+          </div>
+          <div>
+            <label className="block mb-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Branch *</label>
+            <select
+              required
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className={inputCls}
+            >
+              {BRANCHES.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.city})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-zinc-400">
+              Changing branch updates round-robin lead allocation for this user.
+            </p>
+          </div>
+
+          {/* Lead Directing Status Card */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-zinc-900 block">Lead Directing</span>
+                <span className="text-[11px] text-zinc-500 block">
+                  {isLeadPaused ? "Paused — user will be skipped in round-robin and webhook routing" : "Active — user receives incoming leads normally"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLeadPaused((prev) => !prev)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  !isLeadPaused ? "bg-emerald-600" : "bg-amber-500"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    !isLeadPaused ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isLeadPaused && (
+              <div className="pt-2 border-t border-zinc-200/80 space-y-2">
+                <label className="block text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
+                  Pause Reason
+                </label>
+                <div className="flex flex-wrap gap-1">
+                  {["On Leave", "Shift Ended", "Lunch Break", "Overloaded / Catching Up", "Training"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setLeadPauseReason(preset)}
+                      className={`px-2 py-0.5 text-[10px] rounded-md font-semibold border transition-all cursor-pointer ${
+                        leadPauseReason === preset
+                          ? "bg-amber-100 text-amber-900 border-amber-300 shadow-2xs"
+                          : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={leadPauseReason}
+                  onChange={(e) => setLeadPauseReason(e.target.value)}
+                  placeholder="Reason for pausing leads..."
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                Password <span className="normal-case font-normal text-zinc-400">(optional)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setPassword(DEFAULT_USER_PASSWORD);
+                  setShowPassword(true);
+                }}
+                className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors cursor-pointer"
+              >
+                Reset to default ({DEFAULT_USER_PASSWORD})
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                minLength={8}
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Leave blank to keep unchanged"
+                className={`${inputCls} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                {showPassword ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] text-zinc-400">
+              Default password is <span className="font-mono font-medium text-emerald-700">{DEFAULT_USER_PASSWORD}</span> until changed.
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors cursor-pointer">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 py-2.5 text-sm font-bold text-white hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 shadow-sm shadow-emerald-600/20 transition-all cursor-pointer">
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

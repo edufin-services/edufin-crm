@@ -4,11 +4,21 @@ import { getSession } from "@/lib/session";
 
 export async function GET() {
   const session = await getSession();
-  if (!session?.userId) {
+  if (!session) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
 
-  const user = getUserById(session.userId);
+  if (session.isAdmin) {
+    return NextResponse.json({
+      user: { id: "__admin__", name: "Admin", email: process.env.ADMIN_EMAIL ?? "admin", isAdmin: true },
+    });
+  }
+
+  if (!session.userId) {
+    return NextResponse.json({ user: null }, { status: 401 });
+  }
+
+  const user = await getUserById(session.userId);
   if (!user) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
