@@ -8,8 +8,8 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/admi
   if (!session?.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
-  await deleteUser(id);
-  return NextResponse.json({ success: true });
+  const deleted = await deleteUser(id);
+  return NextResponse.json({ success: true, deleted });
 }
 
 export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/agents/[id]">) {

@@ -1,4 +1,5 @@
 import "server-only";
+import mongoose from "mongoose";
 import { Channel, Stage } from "./constants";
 import { dbConnect } from "./mongoose";
 import {
@@ -331,6 +332,18 @@ function toPlain<T>(doc: unknown): T {
 
 // ── Users ──────────────────────────────────────────────────────────────────
 
+export function userQuery(id: string) {
+  if (typeof id === "string" && mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+    return {
+      $or: [
+        { id },
+        { _id: new mongoose.Types.ObjectId(id) },
+      ],
+    };
+  }
+  return { id };
+}
+
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   await dbConnect();
   const doc = await UserModel.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } });
@@ -339,7 +352,7 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
 
 export async function getUserById(id: string): Promise<User | undefined> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id });
+  const doc = await UserModel.findOne(userQuery(id));
   return doc ? toPlain<User>(doc) : undefined;
 }
 
@@ -352,7 +365,7 @@ export async function createUser(user: Omit<User, "id" | "createdAt">): Promise<
 
 export async function updateUserPassword(userId: string, passwordHash: string): Promise<void> {
   await dbConnect();
-  await UserModel.updateOne({ id: userId }, { $set: { passwordHash } });
+  await UserModel.updateOne(userQuery(userId), { $set: { passwordHash } });
 }
 
 export async function updateUser(
@@ -360,7 +373,7 @@ export async function updateUser(
   updates: Partial<Pick<User, "name" | "company" | "email" | "phone" | "passwordHash" | "branchId" | "branchName" | "isLeadPaused" | "leadPauseReason" | "leadPausedAt">>
 ): Promise<User | undefined> {
   await dbConnect();
-  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  const doc = await UserModel.findOneAndUpdate(userQuery(userId), { $set: updates }, { returnDocument: "after" });
   return doc ? toPlain<User>(doc) : undefined;
 }
 
@@ -369,7 +382,7 @@ export async function updateUserProfile(
   updates: Partial<Pick<User, "name" | "email" | "phone" | "isLeadPaused" | "leadPauseReason" | "leadPausedAt">>
 ): Promise<User | undefined> {
   await dbConnect();
-  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  const doc = await UserModel.findOneAndUpdate(userQuery(userId), { $set: updates }, { returnDocument: "after" });
   return doc ? toPlain<User>(doc) : undefined;
 }
 
@@ -384,7 +397,7 @@ export async function setUserLeadPauseStatus(
     leadPauseReason: isLeadPaused ? (reason || "") : "",
     leadPausedAt: isLeadPaused ? new Date().toISOString() : "",
   };
-  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  const doc = await UserModel.findOneAndUpdate(userQuery(userId), { $set: updates }, { returnDocument: "after" });
   return doc ? toPlain<User>(doc) : undefined;
 }
 
@@ -393,47 +406,47 @@ export async function updateCompanyInfo(
   updates: Partial<Pick<User, "company" | "companyWebsite" | "companyIndustry" | "companyTimezone">>
 ): Promise<User | undefined> {
   await dbConnect();
-  const doc = await UserModel.findOneAndUpdate({ id: userId }, { $set: updates }, { returnDocument: "after" });
+  const doc = await UserModel.findOneAndUpdate(userQuery(userId), { $set: updates }, { returnDocument: "after" });
   return doc ? toPlain<User>(doc) : undefined;
 }
 
 export async function getUserChannels(userId: string): Promise<Record<string, boolean>> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id: userId });
+  const doc = await UserModel.findOne(userQuery(userId));
   const user = doc ? toPlain<User>(doc) : undefined;
   return { ...DEFAULT_CHANNELS, ...(user?.channels ?? {}) };
 }
 
 export async function setUserChannel(userId: string, channel: string, connected: boolean): Promise<Record<string, boolean>> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id: userId });
+  const doc = await UserModel.findOne(userQuery(userId));
   const user = doc ? toPlain<User>(doc) : undefined;
   if (!user) return DEFAULT_CHANNELS;
   const channels = { ...DEFAULT_CHANNELS, ...(user.channels ?? {}), [channel]: connected };
-  await UserModel.updateOne({ id: userId }, { $set: { channels } });
+  await UserModel.updateOne(userQuery(userId), { $set: { channels } });
   return channels;
 }
 
 export async function getNotificationPrefs(userId: string): Promise<Record<string, boolean>> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id: userId });
+  const doc = await UserModel.findOne(userQuery(userId));
   const user = doc ? toPlain<User>(doc) : undefined;
   return { ...DEFAULT_NOTIFICATION_PREFS, ...(user?.notificationPrefs ?? {}) };
 }
 
 export async function setNotificationPrefs(userId: string, prefs: Record<string, boolean>): Promise<Record<string, boolean>> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id: userId });
+  const doc = await UserModel.findOne(userQuery(userId));
   const user = doc ? toPlain<User>(doc) : undefined;
   if (!user) return DEFAULT_NOTIFICATION_PREFS;
   const notificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(user.notificationPrefs ?? {}), ...prefs };
-  await UserModel.updateOne({ id: userId }, { $set: { notificationPrefs } });
+  await UserModel.updateOne(userQuery(userId), { $set: { notificationPrefs } });
   return notificationPrefs;
 }
 
 export async function getNotifications(userId: string): Promise<Notification[]> {
   await dbConnect();
-  const doc = await UserModel.findOne({ id: userId });
+  const doc = await UserModel.findOne(userQuery(userId));
   const user = doc ? toPlain<User>(doc) : undefined;
   const prefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(user?.notificationPrefs ?? {}) };
   const readAt = user?.notificationsReadAt ? new Date(user.notificationsReadAt).getTime() : 0;
@@ -495,7 +508,7 @@ export async function getNotifications(userId: string): Promise<Notification[]> 
 export async function markNotificationsRead(userId: string): Promise<string> {
   await dbConnect();
   const now = new Date().toISOString();
-  await UserModel.updateOne({ id: userId }, { $set: { notificationsReadAt: now } });
+  await UserModel.updateOne(userQuery(userId), { $set: { notificationsReadAt: now } });
   return now;
 }
 
@@ -535,15 +548,51 @@ export async function getLeadById(id: string, ownerId: string): Promise<Lead | u
   return doc ? toPlain<Lead>(doc) : undefined;
 }
 
-export async function getAllUsers(): Promise<User[]> {
-  await dbConnect();
-  const docs = await UserModel.find({});
-  return docs.map((d) => toPlain<User>(d));
+let usersMigrated = false;
+async function ensureUsersHaveId() {
+  if (usersMigrated) return;
+  usersMigrated = true;
+  try {
+    const rawUsers = await UserModel.find({
+      $or: [{ id: { $exists: false } }, { id: null }, { id: "" }],
+    });
+    for (const u of rawUsers) {
+      const stringId = String(u._id);
+      await UserModel.updateOne(
+        { _id: u._id },
+        {
+          $set: {
+            id: stringId,
+            ...(u.createdAt && !isNaN(new Date(u.createdAt).getTime())
+              ? {}
+              : { createdAt: new Date().toISOString() }),
+          },
+        }
+      );
+    }
+  } catch (err) {
+    console.error("[ensureUsersHaveId] Migration error:", err);
+  }
 }
 
-export async function deleteUser(id: string): Promise<void> {
+export async function getAllUsers(): Promise<User[]> {
   await dbConnect();
-  await UserModel.deleteOne({ id });
+  await ensureUsersHaveId();
+  const docs = await UserModel.find({});
+  return docs.map((d) => {
+    const u = toPlain<User>(d);
+    if (!u.createdAt || isNaN(new Date(u.createdAt).getTime())) {
+      u.createdAt = new Date().toISOString();
+    }
+    return u;
+  });
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  await dbConnect();
+  const filter = userQuery(id);
+  const res = await UserModel.deleteOne(filter);
+  return (res.deletedCount ?? 0) > 0;
 }
 
 export async function getAllLeads(): Promise<Lead[]> {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DEFAULT_USER_PASSWORD, BRANCHES } from "@/lib/constants";
+import ConfirmModal from "@/app/components/ConfirmModal";
 
 type Agent = {
   id: string;
@@ -149,12 +150,27 @@ export default function AdminAgentsPage() {
     }
   }
 
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
   async function confirmDelete() {
     if (!deleteId) return;
-    setAgents((prev) => prev.filter((a) => a.id !== deleteId));
-    await fetch(`/api/admin/agents/${deleteId}`, { method: "DELETE" });
-    setDeleteId(null);
-    setDeleteName("");
+    setIsDeletingUser(true);
+    const targetId = deleteId;
+    try {
+      const res = await fetch(`/api/admin/agents/${targetId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setAgents((prev) => prev.filter((a) => a.id !== targetId));
+        setDeleteId(null);
+        setDeleteName("");
+      } else {
+        alert(data.error || "Failed to delete user. Please try again.");
+      }
+    } catch {
+      alert("Network error deleting user.");
+    } finally {
+      setIsDeletingUser(false);
+    }
   }
 
   return (
@@ -498,35 +514,24 @@ export default function AdminAgentsPage() {
         </div>
       )}
 
-      {/* Delete Confirm */}
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => { setDeleteId(null); setDeleteName(""); }}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 border border-red-100">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <h2 className="text-base font-bold text-zinc-900">Delete {deleteName}?</h2>
-            <p className="mt-1.5 text-sm text-zinc-500">
-              This permanently deletes the user account. Their leads will remain in the system.
-            </p>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => { setDeleteId(null); setDeleteName(""); }}
-                className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition-colors shadow-sm">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Delete User Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deleteId)}
+        onClose={() => {
+          if (!isDeletingUser) {
+            setDeleteId(null);
+            setDeleteName("");
+          }
+        }}
+        onConfirm={confirmDelete}
+        title="Delete User Account?"
+        description="This permanently deletes the user account. Any student leads assigned to them will remain safe in the CRM."
+        leadName={deleteName}
+        confirmLabel="Delete User"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={isDeletingUser}
+      />
     </div>
   );
 }
