@@ -16,7 +16,9 @@ export const metadata: Metadata = {
   title: "EduFin CRM - Education & Admissions Leads CRM",
   description: "AI CRM for education counseling, admissions & student lead management",
   icons: {
-    icon: "/logo-icon.png",
+    icon: [
+      { url: "/logo-icon.png", type: "image/png" },
+    ],
     shortcut: "/logo-icon.png",
     apple: "/logo-icon.png",
   },
