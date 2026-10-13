@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       name: String(name),
       channel: "Referral/Others",
       value: 0,
-      stage: "Initial",
+      stage: "Initial Contact",
       phone: cleanPhone || undefined,
       email: email || undefined,
       notes: `Ingested via Justdial Webhook: ${JSON.stringify(body)}`,

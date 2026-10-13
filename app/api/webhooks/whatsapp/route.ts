@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
             name: senderName,
             channel: "WhatsApp",
             value: 0,
-            stage: "Initial",
+            stage: "Initial Contact",
             whatsappId: waId,
             phone: `+${waId}`,
           });

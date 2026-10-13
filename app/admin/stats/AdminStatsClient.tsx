@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { Stage, STAGES, CHANNELS } from "@/lib/constants";
+import { Stage, STAGES, CHANNELS, normalizeStage } from "@/lib/constants";
 import { Lead, Task, Contact, User } from "@/lib/db";
 
 // ── Color and Badge Palettes ──────────────────────────────────────────────────
@@ -15,8 +15,8 @@ const STAGE_CONFIG: Record<Stage, {
   gradient: string;
   textColor: string;
 }> = {
-  Initial: {
-    label: "Initial Inquiries",
+  "Initial Contact": {
+    label: "Initial Contact",
     desc: "Fresh leads to contact",
     badge: "bg-blue-50 text-blue-700 border-blue-200/80",
     dot: "bg-blue-500",
@@ -24,32 +24,104 @@ const STAGE_CONFIG: Record<Stage, {
     gradient: "from-blue-500 to-indigo-600",
     textColor: "text-blue-600",
   },
+  Filtered: {
+    label: "Filtered",
+    desc: "Filtered / dropped leads",
+    badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
+    dot: "bg-zinc-400",
+    bar: "bg-zinc-400",
+    gradient: "from-zinc-400 to-zinc-500",
+    textColor: "text-zinc-600",
+  },
   Connected: {
-    label: "In Discussion",
-    desc: "Actively engaged in pipeline",
+    label: "Connected",
+    desc: "Call connected / in discussion",
+    badge: "bg-yellow-50 text-yellow-700 border-yellow-200/80",
+    dot: "bg-yellow-500",
+    bar: "bg-yellow-500",
+    gradient: "from-yellow-400 to-amber-500",
+    textColor: "text-yellow-600",
+  },
+  Interested: {
+    label: "Interested",
+    desc: "Course & university options",
+    badge: "bg-sky-50 text-sky-700 border-sky-200/80",
+    dot: "bg-sky-500",
+    bar: "bg-sky-500",
+    gradient: "from-sky-400 to-cyan-500",
+    textColor: "text-sky-600",
+  },
+  Proposal: {
+    label: "Proposal",
+    desc: "Offer & package proposal shared",
     badge: "bg-amber-50 text-amber-700 border-amber-200/80",
     dot: "bg-amber-500",
     bar: "bg-amber-500",
     gradient: "from-amber-500 to-orange-600",
     textColor: "text-amber-600",
   },
-  Confirmed: {
-    label: "Confirmed Won",
-    desc: "Booking finalized & converted",
+  Registration: {
+    label: "Registration",
+    desc: "Registration completed",
+    badge: "bg-pink-50 text-pink-700 border-pink-200/80",
+    dot: "bg-pink-500",
+    bar: "bg-pink-500",
+    gradient: "from-pink-500 to-rose-600",
+    textColor: "text-pink-600",
+  },
+  "Admission Letter": {
+    label: "Admission Letter",
+    desc: "Admission letter issued",
+    badge: "bg-purple-50 text-purple-700 border-purple-200/80",
+    dot: "bg-purple-500",
+    bar: "bg-purple-500",
+    gradient: "from-purple-500 to-indigo-600",
+    textColor: "text-purple-600",
+  },
+  "2nd Payment": {
+    label: "2nd Payment",
+    desc: "Second payment milestone",
+    badge: "bg-teal-50 text-teal-700 border-teal-200/80",
+    dot: "bg-teal-500",
+    bar: "bg-teal-500",
+    gradient: "from-teal-500 to-emerald-600",
+    textColor: "text-teal-600",
+  },
+  OTC: {
+    label: "OTC",
+    desc: "One time charges paid",
+    badge: "bg-indigo-50 text-indigo-700 border-indigo-200/80",
+    dot: "bg-indigo-500",
+    bar: "bg-indigo-500",
+    gradient: "from-indigo-500 to-violet-600",
+    textColor: "text-indigo-600",
+  },
+  Invitation: {
+    label: "Invitation",
+    desc: "Visa invitation received",
+    badge: "bg-violet-50 text-violet-700 border-violet-200/80",
+    dot: "bg-violet-500",
+    bar: "bg-violet-500",
+    gradient: "from-violet-500 to-purple-600",
+    textColor: "text-violet-600",
+  },
+  "3rd Payment": {
+    label: "3rd Payment",
+    desc: "Third payment milestone",
+    badge: "bg-blue-50 text-blue-800 border-blue-200/80",
+    dot: "bg-blue-600",
+    bar: "bg-blue-600",
+    gradient: "from-blue-600 to-indigo-700",
+    textColor: "text-blue-700",
+  },
+  "Visa Process": {
+    label: "Visa Process",
+    desc: "Visa approved & stamped",
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
     dot: "bg-emerald-500",
     bar: "bg-emerald-500",
     gradient: "from-emerald-500 to-teal-600",
     textColor: "text-emerald-600",
-  },
-  Closed: {
-    label: "Closed / Lost",
-    desc: "Unsuccessful / drop-off",
-    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
-    dot: "bg-rose-500",
-    bar: "bg-rose-500",
-    gradient: "from-rose-500 to-red-600",
-    textColor: "text-rose-600",
   },
 };
 
@@ -151,24 +223,31 @@ export default function AdminStatsClient({
     });
   }, [leads, branchFilter, timeframe]);
 
-  // ── Core Calculations (STRICT: Confirmed = WON, Closed = LOST) ────────────
+  // ── Core Calculations (STRICT: Visa Success = WON, Cold Stage = LOST) ────────────
   const totalLeads = filteredLeads.length;
 
   const stageBreakdown = useMemo(() => {
-    const counts: Record<string, number> = { Initial: 0, Connected: 0, Confirmed: 0, Closed: 0 };
-    const values: Record<string, number> = { Initial: 0, Connected: 0, Confirmed: 0, Closed: 0 };
+    const counts: Record<string, number> = {};
+    const values: Record<string, number> = {};
+    for (const s of STAGES) {
+      counts[s] = 0;
+      values[s] = 0;
+    }
 
     for (const l of filteredLeads) {
-      const stg = l.stage in counts ? l.stage : "Initial";
+      const stg = normalizeStage(l.stage);
       counts[stg] = (counts[stg] || 0) + 1;
       values[stg] = (values[stg] || 0) + (l.value || 0);
     }
     return { counts, values };
   }, [filteredLeads]);
 
-  const confirmedCount = stageBreakdown.counts["Confirmed"] || 0;
-  const closedCount = stageBreakdown.counts["Closed"] || 0;
-  const inPipelineCount = (stageBreakdown.counts["Initial"] || 0) + (stageBreakdown.counts["Connected"] || 0);
+  const confirmedCount = stageBreakdown.counts["Visa Process"] || stageBreakdown.counts["Visa Success"] || stageBreakdown.counts["Confirmed"] || 0;
+  const closedCount = stageBreakdown.counts["Filtered"] || stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
+  const inPipelineCount = filteredLeads.filter((l) => {
+    const s = normalizeStage(l.stage);
+    return s !== "Filtered" && s !== "Visa Process";
+  }).length;
 
   // Conversion rates
   const winRate = totalLeads > 0 ? (confirmedCount / totalLeads) * 100 : 0;
@@ -178,13 +257,15 @@ export default function AdminStatsClient({
 
   // Financial values
   const totalPipelineValue = filteredLeads.reduce((s, l) => s + (l.value || 0), 0);
-  const activePipelineValue = (stageBreakdown.values["Initial"] || 0) + (stageBreakdown.values["Connected"] || 0);
-  const confirmedValue = stageBreakdown.values["Confirmed"] || 0;
+  const activePipelineValue = Object.entries(stageBreakdown.values)
+    .filter(([stg]) => stg !== "Filtered" && stg !== "Visa Process")
+    .reduce((sum, [, val]) => sum + val, 0);
+  const confirmedValue = (stageBreakdown.values["Visa Process"] || 0) + (stageBreakdown.values["Confirmed"] || 0);
 
   // Realized Collected Revenue (firstPayment + secondPayment + thirdPayment + otc)
   const realizedRevenue = useMemo(() => {
     return filteredLeads
-      .filter((l) => l.stage === "Confirmed")
+      .filter((l) => normalizeStage(l.stage) === "Visa Process")
       .reduce((s, l) => {
         const payments = (l.firstPayment || 0) + (l.secondPayment || 0) + (l.thirdPaymentAmount || 0) + (l.otcAmount || 0);
         return s + (payments > 0 ? payments : (l.value || 0));
@@ -205,8 +286,8 @@ export default function AdminStatsClient({
 
     const summarize = (list: Lead[], name: string, region: string) => {
       const count = list.length;
-      const confirmed = list.filter((l) => l.stage === "Confirmed").length;
-      const closed = list.filter((l) => l.stage === "Closed").length;
+      const confirmed = list.filter((l) => normalizeStage(l.stage) === "Visa Process").length;
+      const closed = list.filter((l) => normalizeStage(l.stage) === "Filtered").length;
       const value = list.reduce((s, l) => s + (l.value || 0), 0);
       const win = count > 0 ? Math.round((confirmed / count) * 100) : 0;
       return { name, region, count, confirmed, closed, value, win };
@@ -227,10 +308,11 @@ export default function AdminStatsClient({
       if (!map[ch]) map[ch] = { total: 0, confirmed: 0, closed: 0, value: 0, confirmedValue: 0 };
       map[ch].total++;
       map[ch].value += l.value || 0;
-      if (l.stage === "Confirmed") {
+      const s = normalizeStage(l.stage);
+      if (s === "Visa Process") {
         map[ch].confirmed++;
         map[ch].confirmedValue += l.value || 0;
-      } else if (l.stage === "Closed") {
+      } else if (s === "Filtered") {
         map[ch].closed++;
       }
     }
@@ -285,13 +367,14 @@ export default function AdminStatsClient({
       const entry = statsByUser[l.ownerId];
       entry.total++;
       entry.value += l.value || 0;
-      if (l.stage === "Initial") entry.initial++;
-      if (l.stage === "Connected") entry.connected++;
-      if (l.stage === "Confirmed") {
+      const stg = normalizeStage(l.stage);
+      if (stg === "Initial Contact") entry.initial++;
+      if (stg === "Connected") entry.connected++;
+      if (stg === "Visa Process") {
         entry.confirmed++;
         entry.confirmedValue += l.value || 0;
       }
-      if (l.stage === "Closed") entry.closed++;
+      if (stg === "Filtered") entry.closed++;
     }
 
     let list = Object.values(statsByUser).map((item) => {
@@ -337,7 +420,8 @@ export default function AdminStatsClient({
       if (entry) {
         entry.count++;
         entry.value += lead.value || 0;
-        if (lead.stage === "Confirmed") entry.confirmedCount++;
+        const stg = normalizeStage(lead.stage);
+        if (stg === "Visa Process") entry.confirmedCount++;
       }
     }
     const maxCount = Math.max(1, ...list.map((m) => m.count));
@@ -611,10 +695,10 @@ export default function AdminStatsClient({
           </div>
 
           <div className="flex items-center gap-2 text-xs font-bold text-zinc-500">
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Initial</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Connected</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Confirmed (Won)</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Closed (Lost)</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Initial Contact</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-yellow-500" /> Connected</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Visa Process</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Filtered</span>
           </div>
         </div>
 
@@ -629,10 +713,10 @@ export default function AdminStatsClient({
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500">Initial Inquiries</p>
-              <p className="text-2xl font-black text-blue-700 tracking-tight">{stageBreakdown.counts["Initial"] || 0}</p>
+              <p className="text-2xl font-black text-blue-700 tracking-tight">{(stageBreakdown.counts["Initial Contact"] || stageBreakdown.counts["Initial"] || 0)}</p>
             </div>
             <div className="pt-2 border-t border-blue-100 text-[11px] text-zinc-500 font-medium">
-              Value: <strong className="text-zinc-800">{formatINR(stageBreakdown.values["Initial"] || 0)}</strong>
+              Value: <strong className="text-zinc-800">{formatINR(stageBreakdown.values["Initial Contact"] || stageBreakdown.values["Initial"] || 0)}</strong>
             </div>
           </div>
 
@@ -643,15 +727,15 @@ export default function AdminStatsClient({
                 2 · In Discussion
               </span>
               <span className="text-xs font-black text-amber-600">
-                {totalLeads > 0 ? Math.round(((stageBreakdown.counts["Connected"] || 0) / totalLeads) * 100) : 0}%
+                {totalLeads > 0 ? Math.round((((stageBreakdown.counts["Connected"] || stageBreakdown.counts["Interested"] || 0)) / totalLeads) * 100) : 0}%
               </span>
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500">Connected Prospects</p>
-              <p className="text-2xl font-black text-amber-700 tracking-tight">{stageBreakdown.counts["Connected"] || 0}</p>
+              <p className="text-2xl font-black text-amber-700 tracking-tight">{(stageBreakdown.counts["Connected"] || stageBreakdown.counts["Interested"] || 0)}</p>
             </div>
             <div className="pt-2 border-t border-amber-100 text-[11px] text-zinc-500 font-medium">
-              Value: <strong className="text-zinc-800">{formatINR(stageBreakdown.values["Connected"] || 0)}</strong>
+              Value: <strong className="text-zinc-800">{formatINR(stageBreakdown.values["Connected"] || stageBreakdown.values["Interested"] || 0)}</strong>
             </div>
           </div>
 
@@ -659,12 +743,12 @@ export default function AdminStatsClient({
           <div className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-b from-emerald-50/60 via-emerald-50/20 to-white p-5 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase text-white shadow-2xs">
-                Won · Booked
+                Won · Finalized
               </span>
               <span className="text-xs font-black text-emerald-700">{winRate.toFixed(1)}%</span>
             </div>
             <div>
-              <p className="text-xs font-bold text-emerald-900">Confirmed Won Deals</p>
+              <p className="text-xs font-bold text-emerald-900">Visa Process Deals</p>
               <p className="text-2xl font-black text-emerald-700 tracking-tight">{confirmedCount}</p>
             </div>
             <div className="pt-2 border-t border-emerald-100 text-[11px] text-emerald-800 font-bold">
@@ -676,16 +760,16 @@ export default function AdminStatsClient({
           <div className="rounded-2xl border border-rose-200/80 bg-gradient-to-b from-rose-50/40 to-white p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-rose-700">
-                Leakage · Lost
+                Filtered · Dropped
               </span>
               <span className="text-xs font-black text-rose-600">{lossRate.toFixed(1)}%</span>
             </div>
             <div>
-              <p className="text-xs font-bold text-zinc-500">Closed / Dropped Deals</p>
+              <p className="text-xs font-bold text-zinc-500">Filtered / Dropped</p>
               <p className="text-2xl font-black text-rose-700 tracking-tight">{closedCount}</p>
             </div>
             <div className="pt-2 border-t border-rose-100 text-[11px] text-zinc-500 font-medium">
-              Lost Potential: <strong className="text-rose-700">{formatINR(stageBreakdown.values["Closed"] || 0)}</strong>
+              Lost Potential: <strong className="text-rose-700">{formatINR(stageBreakdown.values["Filtered"] || stageBreakdown.values["Cold Stage"] || stageBreakdown.values["Closed"] || 0)}</strong>
             </div>
           </div>
         </div>

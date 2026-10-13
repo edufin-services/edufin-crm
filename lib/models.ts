@@ -60,6 +60,7 @@ const LeadSchema = new Schema({
   createdAt: { type: String, required: true },
   whatsappId: String,
   email: String,
+  secondaryEmail: { type: String, default: "" },
   phone: String,
   color: String,
   notes: String,
@@ -109,6 +110,8 @@ const LeadSchema = new Schema({
   thirdPaymentAmount: { type: Number, default: 0 },
   otcAmount: { type: Number, default: 0 },
   totalServiceCharge: { type: Number, default: 0 },
+  tuitionFee: { type: Number, default: 0 },
+  hostelFee: { type: Number, default: 0 },
 
   // Documents
   documents: [LeadDocumentSchema],

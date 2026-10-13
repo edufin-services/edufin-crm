@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CHANNELS, SERVICES, STAGES, DEFAULT_USER_PASSWORD, type Channel, type Stage } from "@/lib/constants";
+import { CHANNELS, COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, DEFAULT_USER_PASSWORD, type Channel, type Stage } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import LeadDrawer, { type DrawerLead } from "@/app/dashboard/leads/LeadDrawer";
 import SetReminderModal from "@/app/dashboard/leads/SetReminderModal";
@@ -25,12 +25,7 @@ type Agent = {
 };
 
 // ── Stage palette ──────────────────────────────────────────────────────────────
-const stageMeta: Record<string, { dot: string; border: string; badge: string; text: string }> = {
-  Initial:   { dot: "bg-blue-500",   border: "border-t-blue-400",   badge: "bg-blue-600 text-white",    text: "text-blue-600" },
-  Connected: { dot: "bg-amber-500",  border: "border-t-amber-400",  badge: "bg-amber-600 text-white",   text: "text-amber-600" },
-  Confirmed: { dot: "bg-emerald-500",border: "border-t-emerald-400",badge: "bg-emerald-600 text-white", text: "text-emerald-600" },
-  Closed:    { dot: "bg-red-500",    border: "border-t-red-400",    badge: "bg-red-600 text-white",     text: "text-red-600" },
-};
+const stageMeta = STAGE_META;
 
 // ── Card colour tints ───────────────────────────────────────────────────────────
 const LEAD_COLORS = [
@@ -256,7 +251,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
   }, [targetLeadId, leads]);
 
   const totalValue = useMemo(() => leads.reduce((s, l) => s + (l.value ?? 0), 0), [leads]);
-  const confirmedCount = useMemo(() => leads.filter((l) => l.stage === "Confirmed").length, [leads]);
+  const confirmedCount = useMemo(() => leads.filter((l) => (l.stage as string) === "Visa Success" || (l.stage as string) === "Confirmed").length, [leads]);
 
   const [pendingStage, setPendingStage] = useState<{ id: string; from: Stage; to: Stage } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -265,7 +260,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
     const targetLead = leads.find((l) => l.id === id);
     if (!targetLead || targetLead.stage === toStage) return;
 
-    if (toStage === "Confirmed") {
+    if (toStage === "Visa Process" || (toStage as string) === "Visa Success" || (toStage as string) === "Confirmed") {
       setPendingStage({ id, from: targetLead.stage, to: toStage });
       return;
     }
@@ -291,7 +286,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
     if (!pendingStage) return;
     setConfirmLoading(true);
     const payload: { stage: Stage; value?: number } = { stage: pendingStage.to };
-    if (pendingStage.to === "Confirmed" && typeof revenue === "number") {
+    if ((pendingStage.to === "Visa Process" || (pendingStage.to as string) === "Visa Success" || (pendingStage.to as string) === "Confirmed") && typeof revenue === "number") {
       payload.value = revenue;
     }
     const res = await fetch(`/api/admin/leads/${pendingStage.id}`, {
@@ -483,7 +478,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
             Edit User
           </button>
           <button
-            onClick={() => setModalStage("Initial")}
+            onClick={() => setModalStage("Initial Contact")}
             className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:scale-95 transition-all shadow-xs cursor-pointer"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>
@@ -694,11 +689,13 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
 
       {/* ── KANBAN VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === "kanban" ? (
-        <div className="flex gap-4 overflow-x-auto pb-6 flex-1 items-start">
+        <div className="flex gap-3 overflow-x-auto pb-6 flex-1 items-start w-full pr-2">
           {STAGES.map((stage) => {
-            const stageLeads = filteredLeads.filter((l) => l.stage === stage);
-            const meta = stageMeta[stage] ?? stageMeta.Initial;
+            const stageLeads = filteredLeads.filter((l) => normalizeStage(l.stage) === stage);
+            const meta = stageMeta[stage] ?? stageMeta["Initial Contact"];
             const isDragTarget = dragOverStage === stage;
+            const stageLabel = STAGE_LABELS[stage] ?? stage.toUpperCase();
+            const stageTotalValue = stageLeads.reduce((acc, l) => acc + (l.value || 0), 0);
 
             return (
               <div
@@ -706,19 +703,17 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                 onDragOver={(e) => { e.preventDefault(); setDragOverStage(stage); }}
                 onDragLeave={() => setDragOverStage(null)}
                 onDrop={() => handleDrop(stage)}
-                className={`flex flex-1 min-w-[290px] max-w-[360px] flex-none flex-col rounded-2xl border bg-zinc-50/50 p-4 transition-all ${
+                className={`flex w-[280px] min-w-[280px] shrink-0 flex-col rounded-2xl border bg-[#f8fafc] p-2.5 transition-all ${
                   isDragTarget ? "bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200" : "border-zinc-200/80"
                 }`}
               >
                 {/* Column header matching screenshot */}
-                <div className="mb-4 flex items-center justify-between px-1">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
-                    <h2 className="text-xs font-black uppercase tracking-wider text-zinc-900">{stage}</h2>
-                  </div>
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${meta.badge}`}>
-                    {stageLeads.length}
-                  </span>
+                <div className="mb-2.5 px-1 pt-1 pb-1 flex flex-col items-center text-center">
+                  <h2 className="text-[12px] font-black uppercase tracking-wider text-zinc-900">{stageLabel}</h2>
+                  <p className="mt-0.5 text-[11px] font-semibold text-zinc-500">
+                    {stageLeads.length} leads • ₹{stageTotalValue.toLocaleString("en-IN")}
+                  </p>
+                  <div className={`mt-2 h-1 w-full rounded-full ${meta.lineColor || "bg-sky-400"}`} />
                 </div>
 
                 {/* Cards stack */}
@@ -773,11 +768,13 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                             </div>
                           )}
 
-                          {/* Services */}
+                          {/* Countries */}
                           {(() => {
-                            const rawList = deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
-                            const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages");
-                            const displayList = filtered.length > 0 ? filtered : rawList.includes("Tours & Packages") ? ["Domestic Tours"] : [];
+                            const displayList = deal.preferredCountry
+                              ? [deal.preferredCountry]
+                              : deal.services && deal.services.length > 0
+                              ? deal.services
+                              : [];
                             if (displayList.length === 0) return null;
                             return (
                               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -829,17 +826,20 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                             {nextStage ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); triggerStageChange(deal.id, nextStage); }}
-                                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition-all shadow-xs hover:shadow-md ${
-                                  nextMeta ? `${nextMeta.badge} hover:opacity-95` : "bg-zinc-900 text-white"
-                                }`}
+                                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition-all shadow-xs hover:shadow-md bg-emerald-600 hover:bg-emerald-700 text-white"
+                                title={`Move to ${STAGE_LABELS[nextStage] || nextStage}`}
                               >
                                 Move Next
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                               </button>
-                            ) : (
-                              <span className="flex items-center gap-1.5 rounded-xl bg-red-50 border border-red-200 px-3 py-1.5 text-xs font-bold text-red-700">
+                            ) : normalizeStage(stage) === "Visa Process" ? (
+                              <span className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                Closed
+                                Won
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1.5 rounded-xl bg-zinc-100 border border-zinc-200 px-3 py-1.5 text-xs font-bold text-zinc-600">
+                                Final
                               </span>
                             )}
                           </div>
@@ -953,15 +953,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                           <select
                             value={deal.stage}
                             onChange={(e) => triggerStageChange(deal.id, e.target.value as Stage)}
-                            className={`appearance-none rounded-xl pl-3 pr-7 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-2xs border focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
-                              deal.stage === "Initial"
-                                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100/80"
-                                : deal.stage === "Connected"
-                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100/80"
-                                : deal.stage === "Confirmed"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/80"
-                                : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80"
-                            }`}
+                            className="appearance-none rounded-xl pl-3 pr-7 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-2xs border focus:outline-none focus:ring-2 focus:ring-emerald-200 bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100"
                           >
                             {STAGES.map((s) => (
                               <option key={s} value={s} className="bg-white text-zinc-900 font-semibold py-1">
@@ -1315,13 +1307,13 @@ function AddDealModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5">Services Required</label>
+            <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5">Target Country (Select all that apply)</label>
             <div className="flex flex-wrap gap-2">
-              {["Domestic Tours", "International Tours", "Flights/Hotels", "Others"].map((svc) => {
-                const isSelected = selectedServices.includes(svc);
+              {COUNTRY_OPTIONS.map((country) => {
+                const isSelected = selectedServices.includes(country);
                 return (
                   <label
-                    key={svc}
+                    key={country}
                     className={`flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
                       isSelected
                         ? "bg-emerald-50/70 border-emerald-500 text-emerald-800 shadow-2xs"
@@ -1331,10 +1323,10 @@ function AddDealModal({
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => toggleService(svc)}
+                      onChange={() => toggleService(country)}
                       className="h-3.5 w-3.5 rounded text-blue-600 focus:ring-blue-500 border-zinc-300 cursor-pointer accent-blue-600"
                     />
-                    <span>{svc}</span>
+                    <span>{country}</span>
                   </label>
                 );
               })}
@@ -1380,7 +1372,7 @@ function ConfirmStageModal({
 }) {
   useBodyScrollLock();
   const [revenue, setRevenue] = useState<number | "">(initialValue > 0 ? initialValue : "");
-  const isConfirmed = to === "Confirmed";
+  const isConfirmed = to === "Visa Process" || (to as string) === "Visa Success" || (to as string) === "Confirmed";
 
   return (
     <div

@@ -43,23 +43,23 @@ async function sendWhatsAppMessage(to: string, text: string) {
 
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/conversations/[id]/messages">) {
   const session = await getSession();
-  if (!session?.userId) {
+  if (!session?.userId && !session?.isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await ctx.params;
-  const conversation = await getConversationById(id, session.userId);
+  const conversation = await getConversationById(id, session.userId, session.isAdmin);
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
   }
 
-  const messages = await getMessagesByConversation(id, session.userId);
+  const messages = await getMessagesByConversation(id, session.userId, session.isAdmin);
   return NextResponse.json({ messages });
 }
 
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/conversations/[id]/messages">) {
   const session = await getSession();
-  if (!session?.userId) {
+  if (!session?.userId && !session?.isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -71,12 +71,12 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/convers
     return NextResponse.json({ error: "Message cannot be empty." }, { status: 400 });
   }
 
-  const conversation = await getConversationById(id, session.userId);
+  const conversation = await getConversationById(id, session.userId, session.isAdmin);
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
   }
 
-  const message = await createMessage(id, session.userId, "me", text.trim());
+  const message = await createMessage(id, session.userId || "admin", "me", text.trim(), session.isAdmin);
   if (!message) {
     return NextResponse.json({ error: "Failed to create message." }, { status: 500 });
   }
@@ -89,3 +89,4 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/convers
 
   return NextResponse.json({ message });
 }
+

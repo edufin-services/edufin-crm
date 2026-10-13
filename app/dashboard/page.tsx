@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { STAGES } from "@/lib/constants";
+import { STAGES, normalizeStage, STAGE_META } from "@/lib/constants";
 import {
   getConversationsByOwner,
   getLeadsByOwner,
@@ -10,19 +10,13 @@ import { getSession } from "@/lib/session";
 import { formatRelativeTime } from "@/lib/format";
 import { GreetingTitle, HeaderDate } from "./GreetingText";
 
-const stageColor: Record<string, string> = {
-  Initial: "bg-gradient-to-r from-blue-500 to-indigo-500",
-  Connected: "bg-gradient-to-r from-amber-500 to-orange-500",
-  Confirmed: "bg-gradient-to-r from-emerald-500 to-teal-500",
-  Closed: "bg-gradient-to-r from-red-500 to-rose-600",
-};
+const stageColor: Record<string, string> = Object.fromEntries(
+  STAGES.map((s) => [s, STAGE_META[s]?.bar || "bg-blue-500"])
+);
 
-const stageBadge: Record<string, string> = {
-  Initial: "bg-blue-50 text-blue-700 border-blue-200/60",
-  Connected: "bg-amber-50 text-amber-700 border-amber-200/60",
-  Confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
-  Closed: "bg-red-50 text-red-700 border-red-200/60",
-};
+const stageBadge: Record<string, string> = Object.fromEntries(
+  STAGES.map((s) => [s, STAGE_META[s]?.badge || "bg-blue-50 text-blue-700 border-blue-200"])
+);
 
 const channelBadge: Record<string, string> = {
   WhatsApp: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -87,55 +81,126 @@ const CHANNEL_ICONS: Record<string, React.ReactNode> = {
 };
 
 const STAGE_DETAILS: Record<string, { label: string; desc: string; dot: string; bar: string; badge: string; icon: React.ReactNode }> = {
-  Initial: {
-    label: "Initial Inquiries",
+  "Initial Contact": {
+    label: "Initial Contact",
     desc: "Fresh leads to contact",
     dot: "bg-blue-500",
     bar: "bg-blue-500",
     badge: "bg-blue-50 text-blue-700 border-blue-200/80",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-      </svg>
-    ),
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>,
+  },
+  Filtered: {
+    label: "Filtered",
+    desc: "Filtered / dropped leads",
+    dot: "bg-zinc-400",
+    bar: "bg-zinc-400",
+    badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   },
   Connected: {
-    label: "In Discussion",
-    desc: "Actively engaged",
+    label: "Connected",
+    desc: "Call connected / engaged",
+    dot: "bg-yellow-500",
+    bar: "bg-yellow-500",
+    badge: "bg-yellow-50 text-yellow-700 border-yellow-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+  },
+  Interested: {
+    label: "Interested",
+    desc: "Course & university options",
+    dot: "bg-sky-500",
+    bar: "bg-sky-500",
+    badge: "bg-sky-50 text-sky-700 border-sky-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
+  },
+  Proposal: {
+    label: "Proposal",
+    desc: "Proposal shared",
     dot: "bg-amber-500",
     bar: "bg-amber-500",
     badge: "bg-amber-50 text-amber-700 border-amber-200/80",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    ),
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   },
-  Confirmed: {
-    label: "Confirmed Deals",
-    desc: "Booking finalized",
+  Registration: {
+    label: "Registration",
+    desc: "Registration completed",
+    dot: "bg-rose-400",
+    bar: "bg-rose-400",
+    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
+  },
+  "Admission Letter": {
+    label: "Admission Letter",
+    desc: "Admission letter issued",
+    dot: "bg-purple-500",
+    bar: "bg-purple-500",
+    badge: "bg-purple-50 text-purple-700 border-purple-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+  },
+  "2nd Payment": {
+    label: "2nd Payment",
+    desc: "Second payment installment",
+    dot: "bg-teal-500",
+    bar: "bg-teal-500",
+    badge: "bg-teal-50 text-teal-700 border-teal-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+  },
+  OTC: {
+    label: "OTC",
+    desc: "One time charges paid",
+    dot: "bg-indigo-500",
+    bar: "bg-indigo-500",
+    badge: "bg-indigo-50 text-indigo-700 border-indigo-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  },
+  Invitation: {
+    label: "Invitation",
+    desc: "Visa invitation received",
+    dot: "bg-violet-500",
+    bar: "bg-violet-500",
+    badge: "bg-violet-50 text-violet-700 border-violet-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  },
+  "3rd Payment": {
+    label: "3rd Payment",
+    desc: "Third payment / fee deposit",
+    dot: "bg-blue-600",
+    bar: "bg-blue-600",
+    badge: "bg-blue-50 text-blue-800 border-blue-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 10h8"/></svg>,
+  },
+  "Visa Process": {
+    label: "Visa Process",
+    desc: "Visa processed & stamped",
     dot: "bg-emerald-500",
     bar: "bg-emerald-500",
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" />
-      </svg>
-    ),
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>,
+  },
+  // Fallbacks for legacy
+  Initial: {
+    label: "Initial Contact",
+    desc: "Fresh leads to contact",
+    dot: "bg-blue-500",
+    bar: "bg-blue-500",
+    badge: "bg-blue-50 text-blue-700 border-blue-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
+  },
+  Confirmed: {
+    label: "Visa Success",
+    desc: "Visa approved",
+    dot: "bg-emerald-500",
+    bar: "bg-emerald-500",
+    badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
   },
   Closed: {
-    label: "Closed / Lost",
-    desc: "Deal closed / unsuccessful",
+    label: "Cold Stage",
+    desc: "Closed / lost",
     dot: "bg-rose-500",
     bar: "bg-rose-500",
     badge: "bg-rose-50 text-rose-700 border-rose-200/80",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="15" y1="9" x2="9" y2="15" />
-        <line x1="9" y1="9" x2="15" y2="15" />
-      </svg>
-    ),
+    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
   },
 };
 
@@ -203,10 +268,13 @@ export default async function DashboardPage() {
   const newLeadsCount = leads.filter(
     (l) => Date.now() - new Date(l.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000
   ).length;
-  const initialLeads = leads.filter((l) => l.stage === "Initial").length;
-  const connectedLeads = leads.filter((l) => l.stage === "Connected").length;
-  const inProgressLeads = initialLeads + connectedLeads;
-  const wonCount = leads.filter((l) => l.stage === "Confirmed").length;
+  const initialLeads = leads.filter((l) => normalizeStage(l.stage) === "Initial Contact").length;
+  const inProgressLeads = leads.filter((l) => {
+    const s = normalizeStage(l.stage);
+    return s !== "Filtered" && s !== "Visa Process";
+  }).length;
+  const connectedLeads = Math.max(0, inProgressLeads - initialLeads);
+  const wonCount = leads.filter((l) => normalizeStage(l.stage) === "Visa Process").length;
   const conversionRate = leads.length > 0 ? ((wonCount / leads.length) * 100).toFixed(1) : "0.0";
   const totalPipelineValue = leads.reduce((s, l) => s + (l.value || 0), 0);
   const firstName = user.name.split(" ")[0];
@@ -570,8 +638,8 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* 4 Stage Metric Cards in a Responsive 2x2 Grid */}
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 13 Stage Metric Cards in a Responsive Grid */}
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
               {STAGES.map((stg) => {
                 const count = leads.filter((l) => l.stage === stg).length;
                 const pct = leads.length > 0 ? Math.round((count / leads.length) * 100) : 0;

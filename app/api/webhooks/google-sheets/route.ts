@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
       phone: phone || undefined,
       email: email || undefined,
       channel: "Referral/Others",
-      stage: "Initial",
+      stage: "Initial Contact",
       value,
       serviceType,
       city,

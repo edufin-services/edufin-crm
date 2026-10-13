@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       travelDate,
       assignedBranchId,
       assignedBranchName,
-      stage: "Connected",
+      stage: "Interested",
       channel: "Email",
       value: Number(sourceAmount),
     });

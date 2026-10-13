@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatRelativeTime } from "@/lib/format";
-import { STAGES } from "@/lib/constants";
+import { STAGES, normalizeStage } from "@/lib/constants";
 
 import { HeaderDate } from "@/app/dashboard/GreetingText";
 
@@ -20,7 +20,10 @@ export default async function AdminDashboardPage() {
   const totalUsers = users.length;
 
   const stageCount: Record<string, number> = {};
-  for (const l of leads) stageCount[l.stage] = (stageCount[l.stage] ?? 0) + 1;
+  for (const l of leads) {
+    const s = normalizeStage(l.stage);
+    stageCount[s] = (stageCount[s] ?? 0) + 1;
+  }
 
   const channelCount: Record<string, number> = {};
   for (const l of leads) channelCount[l.channel] = (channelCount[l.channel] ?? 0) + 1;
@@ -32,7 +35,10 @@ export default async function AdminDashboardPage() {
   const totalDealValue = leads.reduce((sum, l) => sum + (l.value ?? 0), 0);
   const totalRevenue = totalPayments + totalOtc;
   const effectiveRevenue = totalRevenue > 0 ? totalRevenue : totalDealValue;
-  const activeInPipeline = (stageCount["Initial"] ?? 0) + (stageCount["Connected"] ?? 0);
+  const activeInPipeline = leads.filter((l) => {
+    const s = normalizeStage(l.stage);
+    return s !== "Filtered" && s !== "Visa Process";
+  }).length;
 
   // Leads per user owner
   const ownerLeadCount: Record<string, number> = {};
@@ -52,10 +58,11 @@ export default async function AdminDashboardPage() {
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const newThisWeek = leads.filter((l) => new Date(l.createdAt).getTime() >= sevenDaysAgo).length;
 
-  const completedCount = stageCount["Confirmed"] ?? 0;
+  const completedCount = stageCount["Visa Process"] ?? stageCount["Confirmed"] ?? 0;
   const conversionRate = totalLeads > 0 ? Math.round((completedCount / totalLeads) * 100) : 0;
 
   function fmt(v: number) {
+    if (v >= 1_00_00_000) return `₹${(v / 1_00_00_000).toFixed(1)}Cr`;
     if (v >= 1_00_00_000) return `₹${(v / 1_00_00_000).toFixed(1)}Cr`;
     if (v >= 1_00_000) return `₹${(v / 1_00_000).toFixed(1)}L`;
     if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
@@ -63,59 +70,141 @@ export default async function AdminDashboardPage() {
   }
 
   const STAGE_META: Record<string, { label: string; desc: string; dot: string; bar: string; text: string; badge: string; icon: React.ReactNode }> = {
-    Initial: {
-      label: "Initial Inquiries",
+    "Initial Contact": {
+      label: "Initial Contact",
       desc: "Fresh leads to contact",
       dot: "bg-blue-500",
       bar: "bg-blue-500",
       text: "text-blue-700",
       badge: "bg-blue-50 text-blue-700 border-blue-200/80",
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-        </svg>
-      ),
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>,
+    },
+    Filtered: {
+      label: "Filtered",
+      desc: "Filtered / dropped leads",
+      dot: "bg-zinc-400",
+      bar: "bg-zinc-400",
+      text: "text-zinc-700",
+      badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
     },
     Connected: {
-      label: "In Discussion",
-      desc: "Actively engaged",
+      label: "Connected",
+      desc: "Call connected / in discussion",
+      dot: "bg-yellow-500",
+      bar: "bg-yellow-500",
+      text: "text-yellow-700",
+      badge: "bg-yellow-50 text-yellow-700 border-yellow-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+    },
+    Interested: {
+      label: "Interested",
+      desc: "Course & university options",
+      dot: "bg-sky-500",
+      bar: "bg-sky-500",
+      text: "text-sky-700",
+      badge: "bg-sky-50 text-sky-700 border-sky-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
+    },
+    Proposal: {
+      label: "Proposal",
+      desc: "Offer & package proposal shared",
       dot: "bg-amber-500",
       bar: "bg-amber-500",
       text: "text-amber-700",
       badge: "bg-amber-50 text-amber-700 border-amber-200/80",
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      ),
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
     },
-    Confirmed: {
-      label: "Confirmed / Enrolled",
-      desc: "Admission / fee finalized",
+    Registration: {
+      label: "Registration",
+      desc: "Registration form completed",
+      dot: "bg-rose-400",
+      bar: "bg-rose-400",
+      text: "text-rose-700",
+      badge: "bg-rose-50 text-rose-700 border-rose-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
+    },
+    "Admission Letter": {
+      label: "Admission Letter",
+      desc: "Admission letter issued",
+      dot: "bg-purple-500",
+      bar: "bg-purple-500",
+      text: "text-purple-700",
+      badge: "bg-purple-50 text-purple-700 border-purple-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+    },
+    "2nd Payment": {
+      label: "2nd Payment",
+      desc: "Second payment milestone received",
+      dot: "bg-teal-500",
+      bar: "bg-teal-500",
+      text: "text-teal-700",
+      badge: "bg-teal-50 text-teal-700 border-teal-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+    },
+    OTC: {
+      label: "OTC",
+      desc: "One time charges paid",
+      dot: "bg-indigo-500",
+      bar: "bg-indigo-500",
+      text: "text-indigo-700",
+      badge: "bg-indigo-50 text-indigo-700 border-indigo-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+    },
+    Invitation: {
+      label: "Invitation",
+      desc: "Visa invitation received",
+      dot: "bg-violet-500",
+      bar: "bg-violet-500",
+      text: "text-violet-700",
+      badge: "bg-violet-50 text-violet-700 border-violet-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+    },
+    "3rd Payment": {
+      label: "3rd Payment",
+      desc: "Third payment / fee deposit",
+      dot: "bg-blue-600",
+      bar: "bg-blue-600",
+      text: "text-blue-800",
+      badge: "bg-blue-50 text-blue-800 border-blue-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 10h8"/></svg>,
+    },
+    "Visa Process": {
+      label: "Visa Process",
+      desc: "Visa approved & stamped",
       dot: "bg-emerald-500",
       bar: "bg-emerald-500",
       text: "text-emerald-700",
       badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" />
-        </svg>
-      ),
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>,
+    },
+    // Fallbacks for legacy stages
+    Initial: {
+      label: "Initial Contact",
+      desc: "Fresh leads to contact",
+      dot: "bg-blue-500",
+      bar: "bg-blue-500",
+      text: "text-blue-700",
+      badge: "bg-blue-50 text-blue-700 border-blue-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
+    },
+    Confirmed: {
+      label: "Visa Success",
+      desc: "Visa approved",
+      dot: "bg-emerald-500",
+      bar: "bg-emerald-500",
+      text: "text-emerald-700",
+      badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
     },
     Closed: {
-      label: "Closed / Lost",
-      desc: "Deal closed / unsuccessful",
+      label: "Cold Stage",
+      desc: "Closed / lost",
       dot: "bg-rose-500",
       bar: "bg-rose-500",
       text: "text-rose-700",
       badge: "bg-rose-50 text-rose-700 border-rose-200/80",
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="15" y1="9" x2="9" y2="15" />
-          <line x1="9" y1="9" x2="15" y2="15" />
-        </svg>
-      ),
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/></svg>,
     },
   };
 
@@ -570,8 +659,8 @@ export default async function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* 4 Stage Cards in a 2x2 Grid */}
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 13 Stage Cards in a responsive Grid */}
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
               {STAGES.map((stg) => {
                 const count = stageCount[stg] ?? 0;
                 const pct = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;

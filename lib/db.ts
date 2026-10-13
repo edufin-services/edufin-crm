@@ -1,6 +1,6 @@
 import "server-only";
 import mongoose from "mongoose";
-import { Channel, Stage } from "./constants";
+import { Channel, Stage, normalizeStage } from "./constants";
 import { dbConnect } from "./mongoose";
 import {
   AdminSettingsModel,
@@ -71,6 +71,7 @@ export type Lead = {
   createdAt: string;
   whatsappId?: string;
   email?: string;
+  secondaryEmail?: string;
   phone?: string;
   color?: string;
   notes?: string;
@@ -109,6 +110,8 @@ export type Lead = {
   thirdPaymentAmount?: number;
   otcAmount?: number;
   totalServiceCharge?: number;
+  tuitionFee?: number;
+  hostelFee?: number;
   // Client Visit Scope Fields
   companyName?: string;
   designation?: string;
@@ -146,6 +149,8 @@ export type Conversation = {
   unread: number;
   updatedAt: string;
   whatsappId?: string;
+  ownerName?: string;
+  ownerEmail?: string;
 };
 
 export type Message = {
@@ -598,13 +603,21 @@ export async function deleteUser(id: string): Promise<boolean> {
 export async function getAllLeads(): Promise<Lead[]> {
   await dbConnect();
   const docs = await LeadModel.find({ deletedAt: null }).sort({ createdAt: -1 });
-  return docs.map((d) => toPlain<Lead>(d));
+  return docs.map((d) => {
+    const l = toPlain<Lead>(d);
+    l.stage = normalizeStage(l.stage);
+    return l;
+  });
 }
 
 export async function getLeadsByOwner(ownerId: string): Promise<Lead[]> {
   await dbConnect();
   const docs = await LeadModel.find({ ownerId, deletedAt: null }).sort({ createdAt: -1 });
-  return docs.map((d) => toPlain<Lead>(d));
+  return docs.map((d) => {
+    const l = toPlain<Lead>(d);
+    l.stage = normalizeStage(l.stage);
+    return l;
+  });
 }
 
 // ── Lead Activity Logging ──────────────────────────────────────────────────
@@ -668,7 +681,7 @@ export async function createLead(lead: Omit<Lead, "id" | "createdAt">): Promise<
     id: crypto.randomUUID(),
     createdAt: now,
     updatedAt: now,
-    confirmedAt: lead.stage === "Confirmed" ? now : null,
+    confirmedAt: ((lead.stage as string) === "Visa Success" || (lead.stage as string) === "Confirmed") ? now : null,
   };
   await LeadModel.create(newLead);
 
@@ -686,18 +699,18 @@ export async function createLead(lead: Omit<Lead, "id" | "createdAt">): Promise<
     details: `New lead created via ${newLead.channel || "CRM"} in stage "${newLead.stage}"`,
   }).catch((err) => console.error("[audit] createLead log error:", err));
 
-  if (newLead.stage === "Confirmed") {
+  if ((newLead.stage as string) === "Visa Success" || (newLead.stage as string) === "Confirmed") {
     logLeadActivity({
       type: "lead_confirmed",
       leadId: newLead.id,
       leadName: newLead.name,
       channel: newLead.channel,
       ownerId: newLead.ownerId,
-      newStage: "Confirmed",
+      newStage: "Visa Success",
       value: newLead.value,
       phone: newLead.phone,
       email: newLead.email,
-      details: `Lead created directly in Confirmed stage (Value: ${newLead.value || 0})`,
+      details: `Lead created directly in Visa Success stage (Value: ${newLead.value || 0})`,
     }).catch((err) => console.error("[audit] lead_confirmed log error:", err));
   }
 
@@ -708,10 +721,10 @@ export async function updateLead(
   id: string,
   ownerId: string,
   updates: Partial<Pick<Lead,
-    "stage" | "value" | "name" | "channel" | "email" | "phone" | "color" | "notes" | "formNotes" |
+    "stage" | "value" | "name" | "channel" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" | "ownerId" |
     "assignedBranchId" | "assignedBranchName" |
-    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" |
+    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
     "companyName" | "designation" | "yearlyVolume" | "rateOfferedCN" | "rateOfferedCard" | "rateOfferedTTDD" | "nextFollowUp" | "feedback" | "clientVisitStatus"
   >>
 ): Promise<Lead | undefined> {
@@ -721,7 +734,7 @@ export async function updateLead(
 
   const now = new Date().toISOString();
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
-  if (updates.stage === "Confirmed" && prev?.stage !== "Confirmed") {
+  if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
     setUpdates.confirmedAt = now;
   }
 
@@ -744,7 +757,7 @@ export async function updateLead(
       details: `Stage updated from "${prev.stage}" to "${updates.stage}"`,
     }).catch((err) => console.error("[audit] stage_change log error:", err));
 
-    if (updates.stage === "Confirmed" && prev.stage !== "Confirmed") {
+    if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev.stage as string) !== "Visa Success" && (prev.stage as string) !== "Confirmed") {
       logLeadActivity({
         type: "lead_confirmed",
         leadId: updated.id,
@@ -802,16 +815,19 @@ export async function deleteLead(id: string, ownerId: string): Promise<void> {
 export async function getLeadByIdAdmin(id: string): Promise<Lead | undefined> {
   await dbConnect();
   const doc = await LeadModel.findOne({ id });
-  return doc ? toPlain<Lead>(doc) : undefined;
+  if (!doc) return undefined;
+  const l = toPlain<Lead>(doc);
+  l.stage = normalizeStage(l.stage);
+  return l;
 }
 
 export async function updateLeadAdmin(
   id: string,
   updates: Partial<Pick<Lead,
-    "ownerId" | "stage" | "value" | "name" | "channel" | "email" | "phone" | "color" | "notes" | "formNotes" |
+    "ownerId" | "stage" | "value" | "name" | "channel" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" |
     "assignedBranchId" | "assignedBranchName" |
-    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" |
+    "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
     "companyName" | "designation" | "yearlyVolume" | "rateOfferedCN" | "rateOfferedCard" | "rateOfferedTTDD" | "nextFollowUp" | "feedback" | "clientVisitStatus"
   >>
 ): Promise<Lead | undefined> {
@@ -821,7 +837,7 @@ export async function updateLeadAdmin(
 
   const now = new Date().toISOString();
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
-  if (updates.stage === "Confirmed" && prev?.stage !== "Confirmed") {
+  if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
     setUpdates.confirmedAt = now;
   }
 
@@ -844,7 +860,7 @@ export async function updateLeadAdmin(
       details: `Admin updated stage from "${prev.stage}" to "${updates.stage}"`,
     }).catch((err) => console.error("[audit] admin stage_change log error:", err));
 
-    if (updates.stage === "Confirmed" && prev.stage !== "Confirmed") {
+    if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev.stage as string) !== "Visa Success" && (prev.stage as string) !== "Confirmed") {
       logLeadActivity({
         type: "lead_confirmed",
         leadId: updated.id,
@@ -852,7 +868,7 @@ export async function updateLeadAdmin(
         channel: updated.channel,
         ownerId: updated.ownerId,
         previousStage: prev.stage,
-        newStage: "Confirmed",
+        newStage: "Visa Success",
         value: updated.value,
         phone: updated.phone,
         email: updated.email,
@@ -903,18 +919,19 @@ export async function deleteLeadAdmin(id: string): Promise<Lead | undefined> {
 
 export async function restoreLeadAdmin(id: string): Promise<Lead | undefined> {
   await dbConnect();
-  const doc = await LeadModel.findOneAndUpdate({ id }, { $set: { deletedAt: null, stage: "Initial" } }, { returnDocument: "after" });
+  const doc = await LeadModel.findOneAndUpdate({ id }, { $set: { deletedAt: null, stage: "Initial Contact" } }, { returnDocument: "after" });
   if (doc) {
     const l = toPlain<Lead>(doc);
+    l.stage = normalizeStage(l.stage);
     logLeadActivity({
       type: "stage_change",
       leadId: l.id,
       leadName: l.name,
       channel: l.channel,
       ownerId: l.ownerId,
-      previousStage: "Closed",
-      newStage: "Initial",
-      details: `Admin restored lead to Initial stage`,
+      previousStage: "Filtered",
+      newStage: "Initial Contact",
+      details: `Admin restored lead to Initial Contact stage`,
     }).catch((err) => console.error("[audit] restoreLeadAdmin log error:", err));
     return l;
   }
@@ -923,18 +940,19 @@ export async function restoreLeadAdmin(id: string): Promise<Lead | undefined> {
 
 export async function restoreLead(id: string, ownerId: string): Promise<Lead | undefined> {
   await dbConnect();
-  const doc = await LeadModel.findOneAndUpdate({ id, ownerId }, { $set: { deletedAt: null, stage: "Initial" } }, { returnDocument: "after" });
+  const doc = await LeadModel.findOneAndUpdate({ id, ownerId }, { $set: { deletedAt: null, stage: "Initial Contact" } }, { returnDocument: "after" });
   if (doc) {
     const l = toPlain<Lead>(doc);
+    l.stage = normalizeStage(l.stage);
     logLeadActivity({
       type: "stage_change",
       leadId: l.id,
       leadName: l.name,
       channel: l.channel,
       ownerId: l.ownerId,
-      previousStage: "Closed",
-      newStage: "Initial",
-      details: `Lead restored to Initial stage`,
+      previousStage: "Filtered",
+      newStage: "Initial Contact",
+      details: `Lead restored to Initial Contact stage`,
     }).catch((err) => console.error("[audit] restoreLead log error:", err));
     return l;
   }
@@ -991,6 +1009,27 @@ export async function deleteContact(id: string, ownerId: string): Promise<void> 
 
 // ── Conversations ──────────────────────────────────────────────────────────
 
+export async function getAllConversations(): Promise<Conversation[]> {
+  await dbConnect();
+  await ConversationModel.deleteMany({ name: { $in: ["Ananya Sharma", "Rohan Verma", "Priya Patel"] } });
+  const docs = await ConversationModel.find({}).sort({ updatedAt: -1 });
+  const users = await UserModel.find({});
+  const userMap = new Map<string, { name: string; email: string }>();
+  users.forEach((u) => {
+    userMap.set(u.id, { name: u.name, email: u.email });
+  });
+
+  return docs.map((d) => {
+    const conv = toPlain<Conversation>(d);
+    const u = userMap.get(conv.ownerId);
+    return {
+      ...conv,
+      ownerName: u?.name || "Agent",
+      ownerEmail: u?.email || "",
+    };
+  });
+}
+
 export async function getConversationsByOwner(ownerId: string): Promise<Conversation[]> {
   await dbConnect();
   // Delete any sample dummy conversations if they exist
@@ -999,10 +1038,20 @@ export async function getConversationsByOwner(ownerId: string): Promise<Conversa
   return docs.map((d) => toPlain<Conversation>(d));
 }
 
-export async function getConversationById(id: string, ownerId: string): Promise<Conversation | undefined> {
+export async function getConversationById(id: string, ownerId?: string, isAdmin?: boolean): Promise<Conversation | undefined> {
   await dbConnect();
-  const doc = await ConversationModel.findOne({ id, ownerId });
-  return doc ? toPlain<Conversation>(doc) : undefined;
+  const filter = isAdmin ? { id } : { id, ownerId };
+  const doc = await ConversationModel.findOne(filter);
+  if (!doc) return undefined;
+  const conv = toPlain<Conversation>(doc);
+  if (isAdmin) {
+    const user = await UserModel.findOne(userQuery(conv.ownerId));
+    if (user) {
+      conv.ownerName = user.name;
+      conv.ownerEmail = user.email;
+    }
+  }
+  return conv;
 }
 
 export async function getConversationByWhatsappId(ownerId: string, whatsappId: string): Promise<Conversation | undefined> {
@@ -1018,21 +1067,25 @@ export async function createConversation(conversation: Omit<Conversation, "id">)
   return newConversation;
 }
 
-export async function getMessagesByConversation(conversationId: string, ownerId: string): Promise<Message[]> {
+export async function getMessagesByConversation(conversationId: string, ownerId?: string, isAdmin?: boolean): Promise<Message[]> {
   await dbConnect();
-  const docs = await MessageModel.find({ conversationId, ownerId }).sort({ createdAt: 1 });
+  const filter = isAdmin ? { conversationId } : { conversationId, ownerId };
+  const docs = await MessageModel.find(filter).sort({ createdAt: 1 });
   return docs.map((d) => toPlain<Message>(d));
 }
 
-export async function createMessage(conversationId: string, ownerId: string, from: "me" | "them", text: string): Promise<Message | undefined> {
+export async function createMessage(conversationId: string, ownerId: string, from: "me" | "them", text: string, isAdmin?: boolean): Promise<Message | undefined> {
   await dbConnect();
-  const conversation = await ConversationModel.findOne({ id: conversationId, ownerId });
+  const filter = isAdmin ? { id: conversationId } : { id: conversationId, ownerId };
+  const conversation = await ConversationModel.findOne(filter);
   if (!conversation) return undefined;
+
+  const messageOwnerId = isAdmin ? conversation.ownerId : ownerId;
 
   const message: Message = {
     id: crypto.randomUUID(),
     conversationId,
-    ownerId,
+    ownerId: messageOwnerId,
     from,
     text,
     createdAt: new Date().toISOString(),
@@ -1051,10 +1104,12 @@ export async function createMessage(conversationId: string, ownerId: string, fro
   return message;
 }
 
-export async function markConversationRead(id: string, ownerId: string): Promise<void> {
+export async function markConversationRead(id: string, ownerId?: string, isAdmin?: boolean): Promise<void> {
   await dbConnect();
-  await ConversationModel.updateOne({ id, ownerId }, { $set: { unread: 0 } });
+  const filter = isAdmin ? { id } : { id, ownerId };
+  await ConversationModel.updateOne(filter, { $set: { unread: 0 } });
 }
+
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
@@ -1553,7 +1608,7 @@ export async function assignImportedLead(
     name: imp.name,
     phone: imp.phone,
     channel: (imp.channel as Channel) || "Facebook",
-    stage: "Initial",
+    stage: "Initial Contact",
     value: 0,
     notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
     services: [],
@@ -1597,7 +1652,7 @@ export async function bulkAssignImportedLeads(
       name: imp.name,
       phone: imp.phone,
       channel: (imp.channel as Channel) || "Facebook",
-      stage: "Initial",
+      stage: "Initial Contact",
       value: 0,
       notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
       services: [],
@@ -1641,7 +1696,7 @@ export async function distributeImportedLeads(
       name: imp.name,
       phone: imp.phone,
       channel: (imp.channel as Channel) || "Facebook",
-      stage: "Initial",
+      stage: "Initial Contact",
       value: 0,
       notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
       services: [],

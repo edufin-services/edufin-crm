@@ -1,8 +1,28 @@
 import nodemailer from "nodemailer";
 
-// All stages after "Initial" that should trigger an email to the lead
+// All stages after "Initial Contact" that can trigger an email to the lead
 export const EMAIL_STAGES = new Set([
+  "Filtered",
   "Connected",
+  "Interested",
+  "Proposal",
+  "Registration",
+  "Admission Letter",
+  "2nd Payment",
+  "OTC",
+  "Invitation",
+  "3rd Payment",
+  "Visa Process",
+  // Legacy
+  "Shiksha",
+  "Cold Stage",
+  "Hot Stage",
+  "Interview",
+  "Document",
+  "Visa Payment",
+  "VFS",
+  "Fee Deposit",
+  "Visa Success",
   "Confirmed",
   "Closed",
 ]);
@@ -10,10 +30,70 @@ export const EMAIL_STAGES = new Set([
 type Template = { subject: string; heading: string; body: string };
 
 const STAGE_TEMPLATES: Record<string, Template> = {
+  Filtered: {
+    subject: "Application Update - In Review",
+    heading: "Application Under Review",
+    body: "Your application is currently being evaluated by our admissions team. We will reach out shortly with any further requirements.",
+  },
+  Shiksha: {
+    subject: "Welcome to EduFin Services - Education Consultation",
+    heading: "Consultation In Progress",
+    body: "Thank you for reaching out through Shiksha. Our dedicated academic counselors will connect with you to guide your study abroad pathway.",
+  },
   Connected: {
     subject: "Application Update - Connected",
     heading: "Connected Stage",
-    body: "Your application is now in the <strong>Connected</strong> stage. Our team will contact you with details.",
+    body: "Thank you for connecting with us! Our academic advisors have initiated course & university recommendations for your profile.",
+  },
+  Interested: {
+    subject: "Application Update - Next Steps",
+    heading: "University Options In Progress",
+    body: "Our counselors are preparing customized university and scholarship options based on your academic background.",
+  },
+  Proposal: {
+    subject: "Your EduFin Study Abroad Proposal & Plan",
+    heading: "Admissions Proposal Ready",
+    body: "We have finalized your comprehensive course and university proposal. Please review the details shared by your counselor.",
+  },
+  Registration: {
+    subject: "Registration Completed - EduFin Services",
+    heading: "Registration Stage Completed",
+    body: "Your enrollment registration has been successfully processed. We are now preparing your formal admission dossier.",
+  },
+  "Admission Letter": {
+    subject: "Congratulations - Admission Letter Received!",
+    heading: "Admission Letter Issued",
+    body: "Congratulations! Your official admission letter has been issued by the institution. Please review your enrollment details.",
+  },
+  "2nd Payment": {
+    subject: "Milestone Payment Recorded - EduFin Services",
+    heading: "Second Payment Recorded",
+    body: "Your second installment payment has been recorded. Our team is now proceeding with official documentation.",
+  },
+  OTC: {
+    subject: "One Time Charges Confirmation - EduFin Services",
+    heading: "OTC Payment Recorded",
+    body: "Your one-time charges have been successfully processed. We are moving forward with your admissions timeline.",
+  },
+  Invitation: {
+    subject: "Official University Invitation Letter Received",
+    heading: "Invitation Letter Ready",
+    body: "Your official visa support invitation letter from the university is ready. We are moving into the final visa clearance phase.",
+  },
+  "3rd Payment": {
+    subject: "Tuition / Final Fee Deposit Recorded - EduFin Services",
+    heading: "Fee Deposit Stage",
+    body: "Your tuition fee deposit has been successfully recorded and confirmed by the institution.",
+  },
+  "Visa Process": {
+    subject: "Visa Processing & Approval Update - EduFin Services",
+    heading: "Visa Process Active",
+    body: "Your student visa application is actively in process. Congratulations on reaching this crucial step for your journey abroad!",
+  },
+  "Visa Success": {
+    subject: "Congratulations - Visa Approved & Stamped!",
+    heading: "Visa Approved!",
+    body: "Congratulations! Your study visa has been successfully approved and stamped. Get ready for your exciting journey abroad!",
   },
   Confirmed: {
     subject: "Congratulations - Order Confirmed!",
@@ -23,7 +103,7 @@ const STAGE_TEMPLATES: Record<string, Template> = {
   Closed: {
     subject: "Application Status - Closed",
     heading: "Application Closed",
-    body: "Your application/enquiry has been <strong>Closed</strong>. If you require further assistance or wish to reopen your enquiry, please feel free to reach out to us anytime.",
+    body: "Your application/enquiry has been <strong>Closed</strong>. If you require further assistance, please feel free to reach out anytime.",
   },
 };
 

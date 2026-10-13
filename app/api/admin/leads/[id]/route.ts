@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { STAGES } from "@/lib/constants";
+import { ALL_VALID_STAGES, STAGES, normalizeStage } from "@/lib/constants";
 import { deleteLeadAdmin, getLeadByIdAdmin, getUserById, updateLeadAdmin } from "@/lib/db";
 import { EMAIL_STAGES, sendStageEmail } from "@/lib/email";
 import { getSession } from "@/lib/session";
@@ -14,10 +14,10 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/
 
   const body = await request.json().catch(() => null);
   const {
-    name, value, stage, email, phone, color, notes, services, reminderAt,
+    name, value, stage, email, secondaryEmail, phone, color, notes, services, reminderAt,
     city, state, neetStatus, preferredCountry, preferredUniversity1, preferredUniversity2, assignAgent, ownerId,
     assignedBranchId, assignedBranchName, formNotes,
-    firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
+    firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge, tuitionFee, hostelFee,
     companyName, designation, yearlyVolume, rateOfferedCN, rateOfferedCard, rateOfferedTTDD, nextFollowUp, feedback, clientVisitStatus,
   } = body ?? {};
 
@@ -32,10 +32,11 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/
     updates.value = value;
   }
   if (stage !== undefined) {
-    if (!STAGES.includes(stage)) return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
-    updates.stage = stage;
+    if (!ALL_VALID_STAGES.includes(stage as any)) return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
+    updates.stage = normalizeStage(stage);
   }
   if (email !== undefined) updates.email = typeof email === "string" ? email.trim() : "";
+  if (secondaryEmail !== undefined) updates.secondaryEmail = typeof secondaryEmail === "string" ? secondaryEmail.trim() : "";
   if (phone !== undefined) {
     const rawDigits = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
     const digits = rawDigits.length > 10 ? rawDigits.slice(-10) : rawDigits;
@@ -78,6 +79,8 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/
   if (thirdPaymentAmount !== undefined && typeof thirdPaymentAmount === "number") updates.thirdPaymentAmount = thirdPaymentAmount;
   if (otcAmount !== undefined && typeof otcAmount === "number") updates.otcAmount = otcAmount;
   if (totalServiceCharge !== undefined && typeof totalServiceCharge === "number") updates.totalServiceCharge = totalServiceCharge;
+  if (tuitionFee !== undefined && typeof tuitionFee === "number") updates.tuitionFee = tuitionFee;
+  if (hostelFee !== undefined && typeof hostelFee === "number") updates.hostelFee = hostelFee;
 
   if (companyName !== undefined) updates.companyName = typeof companyName === "string" ? companyName.trim() : "";
   if (designation !== undefined) updates.designation = typeof designation === "string" ? designation.trim() : "";

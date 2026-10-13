@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { STAGES } from "@/lib/constants";
+import { ALL_VALID_STAGES, STAGES, normalizeStage } from "@/lib/constants";
 import { deleteLead, deleteLeadAdmin, getLeadById, getUserById, updateLead, updateLeadAdmin } from "@/lib/db";
 import { EMAIL_STAGES, sendStageEmail } from "@/lib/email";
 import { getSession } from "@/lib/session";
@@ -11,19 +11,19 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/leads/
   const { id } = await ctx.params;
   const body = await request.json().catch(() => null);
   const {
-    name, value, stage, email, phone, color, notes, formNotes, services,
+    name, value, stage, email, secondaryEmail, phone, color, notes, formNotes, services,
     city, state, neetStatus, preferredCountry, preferredUniversity1, preferredUniversity2, assignAgent, ownerId,
-    firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
+    firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge, tuitionFee, hostelFee,
     companyName, designation, yearlyVolume, rateOfferedCN, rateOfferedCard, rateOfferedTTDD, nextFollowUp, feedback, clientVisitStatus,
   } = body ?? {};
 
   const updates: Partial<{
     name: string; value: number; stage: typeof STAGES[number];
-    email: string; phone: string; color: string; notes: string; formNotes: string; reminderAt: string; services: string[];
+    email: string; secondaryEmail: string; phone: string; color: string; notes: string; formNotes: string; reminderAt: string; services: string[];
     city: string; state: string; neetStatus: string; preferredCountry: string;
     preferredUniversity1: string; preferredUniversity2: string; assignAgent: string; ownerId: string;
     firstPayment: number; secondPayment: number; thirdPaymentAmount: number;
-    otcAmount: number; totalServiceCharge: number;
+    otcAmount: number; totalServiceCharge: number; tuitionFee: number; hostelFee: number;
     companyName: string; designation: string; yearlyVolume: number;
     rateOfferedCN: number; rateOfferedCard: number; rateOfferedTTDD: number;
     nextFollowUp: string; feedback: string; clientVisitStatus: string;
@@ -43,6 +43,9 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/leads/
   }
   if (email !== undefined) {
     updates.email = typeof email === "string" ? email.trim() : "";
+  }
+  if (secondaryEmail !== undefined) {
+    updates.secondaryEmail = typeof secondaryEmail === "string" ? secondaryEmail.trim() : "";
   }
   if (phone !== undefined) {
     const digits = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
@@ -82,6 +85,8 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/leads/
   if (thirdPaymentAmount !== undefined && typeof thirdPaymentAmount === "number") updates.thirdPaymentAmount = thirdPaymentAmount;
   if (otcAmount !== undefined && typeof otcAmount === "number") updates.otcAmount = otcAmount;
   if (totalServiceCharge !== undefined && typeof totalServiceCharge === "number") updates.totalServiceCharge = totalServiceCharge;
+  if (tuitionFee !== undefined && typeof tuitionFee === "number") updates.tuitionFee = tuitionFee;
+  if (hostelFee !== undefined && typeof hostelFee === "number") updates.hostelFee = hostelFee;
 
   if (companyName !== undefined) updates.companyName = typeof companyName === "string" ? companyName.trim() : "";
   if (designation !== undefined) updates.designation = typeof designation === "string" ? designation.trim() : "";
@@ -94,17 +99,18 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/leads/
   if (clientVisitStatus !== undefined) updates.clientVisitStatus = typeof clientVisitStatus === "string" ? clientVisitStatus : "Live";
 
   if (stage !== undefined) {
-    if (!STAGES.includes(stage)) return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
+    if (!ALL_VALID_STAGES.includes(stage as any)) return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
 
-    updates.stage = stage;
+    const normStage = normalizeStage(stage);
+    updates.stage = normStage;
     const lead = session.isAdmin
       ? await updateLeadAdmin(id, updates)
       : await updateLead(id, session.userId!, updates);
     if (!lead) return NextResponse.json({ error: "Lead not found." }, { status: 404 });
 
     // Fire email (non-blocking)
-    if (EMAIL_STAGES.has(stage) && lead.email) {
-      sendStageEmail(lead.name, lead.email, stage).catch((err) =>
+    if (EMAIL_STAGES.has(normStage) && lead.email) {
+      sendStageEmail(lead.name, lead.email, normStage).catch((err) =>
         console.error("[email] Stage email failed:", err)
       );
     }

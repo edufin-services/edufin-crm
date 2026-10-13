@@ -47,12 +47,12 @@ export async function GET(_request: NextRequest) {
         delhi: {
           count: delhiLeads.length,
           value: delhiLeads.reduce((acc, l) => acc + (l.value || 0), 0),
-          confirmed: delhiLeads.filter((l) => l.stage === "Confirmed").length,
+          confirmed: delhiLeads.filter((l) => (l.stage as string) === "Visa Success" || (l.stage as string) === "Confirmed").length,
         },
         kolkata: {
           count: kolkataLeads.length,
           value: kolkataLeads.reduce((acc, l) => acc + (l.value || 0), 0),
-          confirmed: kolkataLeads.filter((l) => l.stage === "Confirmed").length,
+          confirmed: kolkataLeads.filter((l) => (l.stage as string) === "Visa Success" || (l.stage as string) === "Confirmed").length,
         },
         unassigned: {
           count: unassignedLeads.length,

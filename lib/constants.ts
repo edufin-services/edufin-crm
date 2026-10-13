@@ -1,23 +1,199 @@
-export const EDUCATION_SERVICES = [
-  "MBBS Abroad",
-  "Study Abroad (UG/PG)",
-  "University Admissions",
-  "Visa & Documentation",
-  "Education Loan Assistance",
+export const COUNTRY_OPTIONS = [
+  "Russia",
+  "China",
+  "Kazakhstan",
+  "Kyrgyzstan",
+  "Georgia",
+  "Uzbekistan",
+  "Nepal",
   "Others",
 ] as const;
-export type EducationService = (typeof EDUCATION_SERVICES)[number];
+export type CountryOption = (typeof COUNTRY_OPTIONS)[number];
 
-export const SERVICES = EDUCATION_SERVICES;
-export type Service = EducationService;
+export const COUNTRIES = COUNTRY_OPTIONS;
+export const SERVICES = COUNTRY_OPTIONS;
+export type Service = CountryOption;
 
 export const STAGES = [
-  "Initial",
+  "Initial Contact",
+  "Filtered",
   "Connected",
-  "Confirmed",
-  "Closed",
+  "Interested",
+  "Proposal",
+  "Registration",
+  "Admission Letter",
+  "2nd Payment",
+  "OTC",
+  "Invitation",
+  "3rd Payment",
+  "Visa Process",
 ] as const;
 export type Stage = (typeof STAGES)[number];
+
+export const LEGACY_STAGES = [
+  "Initial",
+  "Cold Stage",
+  "Hot Stage",
+  "Interview",
+  "Document",
+  "Visa Payment",
+  "VFS",
+  "Fee Deposit",
+  "Visa Success",
+  "Confirmed",
+  "Closed",
+  "Shiksha",
+] as const;
+export type LegacyStage = (typeof LEGACY_STAGES)[number];
+
+export const ALL_VALID_STAGES = [...STAGES, ...LEGACY_STAGES] as const;
+
+export function normalizeStage(stage: string | null | undefined): Stage {
+  if (!stage) return "Initial Contact";
+  const trimmed = stage.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (lower === "initial" || lower === "initial contact" || lower === "shiksha") return "Initial Contact";
+  if (lower === "filtered" || lower === "cold" || lower === "cold stage" || lower === "closed") return "Filtered";
+  if (lower === "connected") return "Connected";
+  if (lower === "interested") return "Interested";
+  if (lower === "proposal" || lower === "hot" || lower === "hot stage") return "Proposal";
+  if (lower === "registration") return "Registration";
+  if (lower === "admission letter" || lower === "admission") return "Admission Letter";
+  if (lower === "2nd payment" || lower === "second payment" || lower === "visa payment") return "2nd Payment";
+  if (lower === "otc") return "OTC";
+  if (lower === "invitation") return "Invitation";
+  if (lower === "3rd payment" || lower === "third payment" || lower === "fee deposit") return "3rd Payment";
+  if (lower === "visa process" || lower === "visa success" || lower === "confirmed" || lower === "visa" || lower === "vfs") return "Visa Process";
+
+  const match = STAGES.find((s) => s.toLowerCase() === lower);
+  if (match) return match;
+
+  return "Initial Contact";
+}
+
+export const STAGE_LABELS: Record<Stage, string> = {
+  "Initial Contact": "INITIAL CONTACT",
+  "Filtered": "FILTERED",
+  "Connected": "CONNECTED",
+  "Interested": "INTERESTED",
+  "Proposal": "PROPOSAL",
+  "Registration": "REGISTRATION",
+  "Admission Letter": "ADMISSION LETTER",
+  "2nd Payment": "2ND PAYMENT",
+  "OTC": "OTC",
+  "Invitation": "INVITATION",
+  "3rd Payment": "3RD PAYMENT",
+  "Visa Process": "VISA PROCESS",
+};
+
+export type StageMetaConfig = {
+  dot: string;
+  bar: string;
+  badge: string;
+  text: string;
+  border: string;
+  lineColor: string;
+};
+
+export const STAGE_META: Record<Stage, StageMetaConfig> = {
+  "Initial Contact": {
+    dot: "bg-blue-500",
+    bar: "bg-blue-500",
+    badge: "bg-blue-50 text-blue-700 border-blue-200",
+    text: "text-blue-600",
+    border: "border-blue-400",
+    lineColor: "bg-sky-400 border-dashed",
+  },
+  "Filtered": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "Connected": {
+    dot: "bg-amber-400",
+    bar: "bg-amber-400",
+    badge: "bg-amber-50 text-amber-700 border-amber-200",
+    text: "text-amber-600",
+    border: "border-amber-400",
+    lineColor: "bg-yellow-300",
+  },
+  "Interested": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "Proposal": {
+    dot: "bg-amber-500",
+    bar: "bg-amber-500",
+    badge: "bg-amber-50 text-amber-700 border-amber-200",
+    text: "text-amber-600",
+    border: "border-amber-400",
+    lineColor: "bg-amber-400",
+  },
+  "Registration": {
+    dot: "bg-rose-400",
+    bar: "bg-rose-400",
+    badge: "bg-rose-50 text-rose-700 border-rose-200",
+    text: "text-rose-600",
+    border: "border-rose-400",
+    lineColor: "bg-rose-300",
+  },
+  "Admission Letter": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "2nd Payment": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "OTC": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "Invitation": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "3rd Payment": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+  "Visa Process": {
+    dot: "bg-sky-400",
+    bar: "bg-sky-400",
+    badge: "bg-sky-50 text-sky-700 border-sky-200",
+    text: "text-sky-600",
+    border: "border-sky-400",
+    lineColor: "bg-sky-400",
+  },
+};
 
 export const CHANNELS = [
   "WhatsApp",
@@ -73,18 +249,7 @@ export const NEET_STATUS_OPTIONS = [
   "Not Applicable",
 ] as const;
 
-export const COUNTRY_OPTIONS = [
-  "Russia",
-  "Kazakhstan",
-  "Kyrgyzstan",
-  "Georgia",
-  "Philippines",
-  "Bangladesh",
-  "Nepal",
-  "China",
-  "Ukraine",
-  "Other",
-] as const;
+// (COUNTRY_OPTIONS is exported at top of file)
 
 export const OPERATING_CITIES = [
   "Delhi NCR",

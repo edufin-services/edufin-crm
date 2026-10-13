@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CHANNELS, SERVICES, STAGES, type Channel, type Stage } from "@/lib/constants";
+import { CHANNELS, COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, type Channel, type Stage } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import LeadDrawer, { type DrawerLead, type LeadDocument, type LeadUpdate } from "./LeadDrawer";
 import SetReminderModal from "./SetReminderModal";
@@ -14,29 +14,10 @@ import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 type Lead = DrawerLead & { value: number };
 
 // ── Stage meta & labels ────────────────────────────────────────────────────────
-const STAGE_LABELS: Record<Stage, string> = {
-  Initial: "INITIAL",
-  Connected: "CONNECTED",
-  Confirmed: "COMPLETED (WON)",
-  Closed: "CLOSED (LOST)",
-};
+const stageMeta = STAGE_META;
 
-const stageMeta: Record<string, { dot: string; border: string; badge: string; text: string }> = {
-  Initial:   { dot: "bg-blue-500",   border: "border-t-blue-400",   badge: "bg-blue-600 text-white",    text: "text-blue-600" },
-  Connected: { dot: "bg-amber-500",  border: "border-t-amber-400",  badge: "bg-amber-600 text-white",   text: "text-amber-600" },
-  Confirmed: { dot: "bg-emerald-500",border: "border-t-emerald-400",badge: "bg-emerald-600 text-white", text: "text-emerald-600" },
-  Closed:    { dot: "bg-red-500",    border: "border-t-red-400",    badge: "bg-zinc-400 text-white",    text: "text-zinc-500" },
-};
-
-// ── Education CRM services list ──────────────────────────────────────────────────
-const TRAVEL_SERVICES = [
-  "MBBS Abroad",
-  "Study Abroad (UG/PG)",
-  "University Admissions",
-  "Visa & Documentation",
-  "Education Loan Assistance",
-  "Others",
-];
+// ── Country options list ────────────────────────────────────────────────────────
+const COUNTRY_SERVICES = COUNTRY_OPTIONS;
 
 // ── Card colour styling ────────────────────────────────────────────────────────
 const LEAD_COLORS = [
@@ -416,7 +397,7 @@ function LeadsPageContent() {
     const prevLead = leads.find((l) => l.id === id);
     if (!prevLead || prevLead.stage === newStage) return;
 
-    if (newStage === "Confirmed") {
+    if (newStage === "Visa Process" || (newStage as string) === "Visa Success" || (newStage as string) === "Confirmed") {
       handleStageChange(id, newStage);
       return;
     }
@@ -440,7 +421,7 @@ function LeadsPageContent() {
     if (!pendingStage) return;
     setConfirmLoading(true);
     const payload: { stage: Stage; value?: number } = { stage: pendingStage.to };
-    if (pendingStage.to === "Confirmed" && typeof revenue === "number") {
+    if ((pendingStage.to === "Visa Process" || (pendingStage.to as string) === "Visa Success" || (pendingStage.to as string) === "Confirmed") && typeof revenue === "number") {
       payload.value = revenue;
     }
     const res = await fetch(`/api/leads/${pendingStage.id}`, {
@@ -511,10 +492,10 @@ function LeadsPageContent() {
 
   // ── Dynamic filter options ───────────────────────────────────────────────────
   const availableServices = useMemo(() => {
-    const set = new Set<string>(TRAVEL_SERVICES);
+    const set = new Set<string>(COUNTRY_SERVICES);
     leads.forEach((l) => {
       if (Array.isArray(l.services)) l.services.forEach((s) => s && set.add(s));
-      if (l.serviceType) set.add(l.serviceType);
+      if (l.preferredCountry) set.add(l.preferredCountry);
     });
     return Array.from(set);
   }, [leads]);
@@ -609,7 +590,7 @@ function LeadsPageContent() {
     });
   }, [leads, stageFilter, channelFilter, serviceFilter, locationFilter, datePreset, startDate, endDate, sortOrder]);
 
-  const confirmedCount = filteredLeads.filter((l) => l.stage === "Confirmed").length;
+  const confirmedCount = filteredLeads.filter((l) => (l.stage as string) === "Visa Success" || (l.stage as string) === "Confirmed").length;
   const total = filteredLeads.length;
 
   return (
@@ -624,7 +605,7 @@ function LeadsPageContent() {
               Active CRM
             </span>
           </div>
-          <p className="mt-1 text-xs text-zinc-500 font-medium">Manage and convert enquiry leads through your 4-stage pipeline</p>
+          <p className="mt-1 text-xs text-zinc-500 font-medium">Manage and convert enquiry leads through your 13-stage pipeline</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -914,18 +895,19 @@ function LeadsPageContent() {
 
       {/* ── MAIN CONTENT (KANBAN OR TABLE VIEW) ───────────────────────────────── */}
       {viewMode === "kanban" ? (
-        /* ── Kanban board: 4 equal columns fitting 100% within screen width without getting cut off ── */
-        <div className="grid grid-cols-4 gap-2.5 w-full pb-6 min-h-[calc(100vh-210px)]">
+        /* ── Kanban board: 13 Stages horizontally scrollable board matching screenshot ── */
+        <div className="flex gap-3 overflow-x-auto pb-6 min-h-[calc(100vh-210px)] items-start w-full pr-2">
           {STAGES.map((stage) => {
-            const meta = stageMeta[stage] ?? stageMeta["Initial"];
+            const meta = stageMeta[stage] ?? stageMeta["Initial Contact"];
             const stageLabel = STAGE_LABELS[stage] ?? stage.toUpperCase();
             const deals = filteredLeads
-              .filter((l) => l.stage === stage)
+              .filter((l) => normalizeStage(l.stage) === stage)
               .sort((a, b) => {
                 const timeA = new Date(a.createdAt || 0).getTime();
                 const timeB = new Date(b.createdAt || 0).getTime();
                 return sortOrder === "desc" ? timeB - timeA : timeA - timeB;
               });
+            const stageTotalValue = deals.reduce((acc, l) => acc + (l.value || 0), 0);
 
             return (
               <div
@@ -951,21 +933,17 @@ function LeadsPageContent() {
                   if (id) handleStageChange(id, stage);
                   setDraggingId(null);
                 }}
-                className={`flex min-w-0 flex-col rounded-2xl bg-[#f8fafc] p-2.5 transition-all duration-200 border border-zinc-200/80 h-full ${
+                className={`flex w-[280px] min-w-[280px] shrink-0 flex-col rounded-2xl bg-[#f8fafc] p-2.5 transition-all duration-200 border border-zinc-200/80 h-full ${
                   dragOverStage === stage ? "ring-2 ring-emerald-500 bg-emerald-50/40 border-emerald-300 scale-[1.01]" : ""
                 }`}
               >
-                {/* Column header matching Forex CRM */}
-                <div className="mb-2.5 flex items-center justify-between px-1 pt-0.5 pb-2 border-b border-zinc-200/70">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`h-2.5 w-2.5 flex-none rounded-full ${meta.dot} shadow-xs`} />
-                    <h2 className="truncate text-[11.5px] font-black text-zinc-900 uppercase tracking-wider">{stageLabel}</h2>
-                  </div>
-                  <span className={`ml-1.5 flex-none rounded-full px-2 py-0.5 text-[10.5px] font-bold min-w-[20px] text-center shadow-2xs ${
-                    deals.length > 0 ? meta.badge : "bg-zinc-200 text-zinc-600"
-                  }`}>
-                    {loading ? "·" : deals.length}
-                  </span>
+                {/* Column header matching screenshot */}
+                <div className="mb-2.5 px-1 pt-1 pb-1 flex flex-col items-center text-center">
+                  <h2 className="text-[12px] font-black text-zinc-900 uppercase tracking-wider">{stageLabel}</h2>
+                  <p className="mt-0.5 text-[11px] font-semibold text-zinc-500">
+                    {deals.length} leads • ₹{stageTotalValue.toLocaleString("en-IN")}
+                  </p>
+                  <div className={`mt-2 h-1 w-full rounded-full ${meta.lineColor || "bg-sky-400"}`} />
                 </div>
 
                 {/* Cards list */}
@@ -986,9 +964,11 @@ function LeadsPageContent() {
                       const remStatus = getReminderStatus(deal.reminderAt);
                       const locText = deal.city?.trim() || deal.state?.trim() || "";
 
-                      const rawList = deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
-                      const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages");
-                      const displayServices = filtered.length > 0 ? filtered : rawList.includes("Tours & Packages") ? ["Domestic Tours"] : [];
+                      const displayServices = deal.preferredCountry
+                        ? [deal.preferredCountry]
+                        : deal.services && deal.services.length > 0
+                        ? deal.services
+                        : [];
 
                       return (
                         <div
@@ -1128,33 +1108,35 @@ function LeadsPageContent() {
                               </button>
                             </div>
 
-                            {/* Right: Move next button / Status matching Forex CRM */}
-                            {stage === "Initial" ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDirectStageChange(deal.id, "Connected"); }}
-                                className="flex items-center gap-1 rounded-lg bg-[#ea580c] hover:bg-[#c2410c] px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-all active:scale-95 whitespace-nowrap"
-                              >
-                                <span>Move next</span>
-                                <span className="font-bold">➔</span>
-                              </button>
-                            ) : stage === "Connected" ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleStageChange(deal.id, "Confirmed"); }}
-                                className="flex items-center gap-1 rounded-lg bg-[#059669] hover:bg-[#047857] px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-all active:scale-95 whitespace-nowrap"
-                              >
-                                <span>Move next</span>
-                                <span className="font-bold">➔</span>
-                              </button>
-                            ) : stage === "Confirmed" ? (
-                              <span className="flex items-center gap-1 rounded-lg bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-0.5 text-[11px] font-bold text-[#059669] whitespace-nowrap">
-                                <span>✓</span>
-                                <span>Won</span>
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 rounded-lg bg-red-50 border border-red-200 px-2.5 py-0.5 text-[11px] font-bold text-red-600 whitespace-nowrap">
-                                Closed
-                              </span>
-                            )}
+                            {/* Right: Move next button / Status */}
+                            {(() => {
+                              const nextStage = STAGES[STAGES.indexOf(stage) + 1] as Stage | undefined;
+                              if (nextStage) {
+                                return (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleStageChange(deal.id, nextStage); }}
+                                    className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-all active:scale-95 whitespace-nowrap"
+                                    title={`Move to ${STAGE_LABELS[nextStage] || nextStage}`}
+                                  >
+                                    <span>Move next</span>
+                                    <span className="font-bold">➔</span>
+                                  </button>
+                                );
+                              }
+                              if (normalizeStage(stage) === "Visa Process") {
+                                return (
+                                  <span className="flex items-center gap-1 rounded-lg bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-0.5 text-[11px] font-bold text-[#059669] whitespace-nowrap">
+                                    <span>✓</span>
+                                    <span>Won</span>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="flex items-center gap-1 rounded-lg bg-zinc-100 border border-zinc-200 px-2.5 py-0.5 text-[11px] font-bold text-zinc-600 whitespace-nowrap">
+                                  Final
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -1305,19 +1287,13 @@ function LeadsPageContent() {
                         <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="relative inline-flex items-center">
                             <select
-                              value={deal.stage}
+                              value={normalizeStage(deal.stage)}
                               onChange={(e) => handleDirectStageChange(deal.id, e.target.value as Stage)}
                               className={`appearance-none rounded-xl pl-3 pr-7 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-2xs border focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
                                 isColored
                                   ? "bg-white/20 text-white border-white/40"
-                                  : deal.stage === "Initial"
-                                  ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100/80"
-                                  : deal.stage === "Connected"
-                                  ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100/80"
-                                  : deal.stage === "Confirmed"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/80"
-                                  : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80"
-                              }`}
+                                  : (stageMeta[normalizeStage(deal.stage)] ?? stageMeta["Initial Contact"]).badge
+                              } hover:opacity-90`}
                             >
                               {STAGES.map((s) => (
                                 <option key={s} value={s} className="bg-white text-zinc-900 font-semibold py-1">
@@ -1610,7 +1586,7 @@ function ConfirmStageModal({
 }) {
   useBodyScrollLock();
   const [revenue, setRevenue] = useState<number | "">(initialValue > 0 ? initialValue : "");
-  const isConfirmed = to === "Confirmed";
+  const isConfirmed = to === "Visa Process" || (to as string) === "Visa Success" || (to as string) === "Confirmed";
 
   return (
     <div
@@ -1788,15 +1764,15 @@ function AddDealModal({
             </div>
           </div>
 
-          {/* Services Selection (Pill Checkboxes with Checkmark) */}
+          {/* Target Country Selection (Pill Checkboxes with Checkmark) */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5">SERVICES (SELECT ALL THAT APPLY)</label>
+            <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5">TARGET COUNTRY (SELECT ALL THAT APPLY)</label>
             <div className="flex flex-wrap gap-2">
-              {["Domestic Tours", "International Tours", "Flights/Hotels", "Others"].map((svc) => {
-                const isSelected = selectedServices.includes(svc);
+              {COUNTRY_OPTIONS.map((country) => {
+                const isSelected = selectedServices.includes(country);
                 return (
                   <label
-                    key={svc}
+                    key={country}
                     className={`flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
                       isSelected
                         ? "bg-emerald-50/70 border-emerald-500 text-emerald-800 shadow-2xs"
@@ -1806,10 +1782,10 @@ function AddDealModal({
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => toggleService(svc)}
+                      onChange={() => toggleService(country)}
                       className="h-3.5 w-3.5 rounded text-blue-600 focus:ring-blue-500 border-zinc-300 cursor-pointer accent-blue-600"
                     />
-                    <span>{svc}</span>
+                    <span>{country}</span>
                   </label>
                 );
               })}
@@ -1831,7 +1807,7 @@ function AddDealModal({
             </div>
           </div>
 
-          {stageVal === "Confirmed" && (
+          {(stageVal === "Visa Process" || (stageVal as string) === "Visa Success" || (stageVal as string) === "Confirmed") && (
             <div>
               <label className="block text-xs font-semibold text-emerald-700 uppercase tracking-wide">
                 DEAL REVENUE (₹)

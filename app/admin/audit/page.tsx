@@ -53,11 +53,11 @@ export default async function AdminAuditPage() {
   if (auditLogs.length === 0) {
     auditLogs = leads.slice(0, 30).map((lead, idx) => ({
       id: `audit-${lead.id}-${idx}`,
-      action: lead.stage === "Confirmed" ? "Lead Confirmed" : "Lead Entry Processed",
+      action: ((lead.stage as string) === "Visa Success" || (lead.stage as string) === "Confirmed") ? "Lead Confirmed" : "Lead Entry Processed",
       user: userMap.get(lead.ownerId) || "System Executive",
       details: `${lead.name} · ${lead.channel} · Stage: ${lead.stage}`,
       timestamp: lead.createdAt,
-      badgeColor: lead.stage === "Confirmed" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-blue-100 text-blue-800 border-blue-200",
+      badgeColor: ((lead.stage as string) === "Visa Success" || (lead.stage as string) === "Confirmed") ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-blue-100 text-blue-800 border-blue-200",
       status: "Success",
     }));
   }

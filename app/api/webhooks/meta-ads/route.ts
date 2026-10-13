@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
           email: leadEmail,
           city: leadCity || undefined,
           channel: leadPlatform === "Instagram" ? "Instagram" : "Facebook",
-          stage: "Initial",
+          stage: "Initial Contact",
           value: 0,
           notes: "",
           formNotes: formAnswers,

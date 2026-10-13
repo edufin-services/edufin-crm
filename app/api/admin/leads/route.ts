@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CHANNELS, STAGES } from "@/lib/constants";
+import { ALL_VALID_STAGES, CHANNELS, normalizeStage } from "@/lib/constants";
 import { createLead, getAllLeads, getLeadsByOwner } from "@/lib/db";
 import { getSession } from "@/lib/session";
 
@@ -25,12 +25,13 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const { ownerId, name, channel, stage, phone, services, notes, city, state } = body ?? {};
   const cleanPhone = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+  const normStage = normalizeStage(stage);
 
   if (
     !ownerId || typeof ownerId !== "string" ||
     typeof name !== "string" || !name.trim() ||
     !CHANNELS.includes(channel) ||
-    !STAGES.includes(stage) ||
+    !ALL_VALID_STAGES.includes(stage as any) ||
     cleanPhone.length !== 10
   ) {
     return NextResponse.json({ error: "Please enter a valid agent, name, channel, stage, and 10-digit phone number." }, { status: 400 });
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     name: name.trim(),
     channel,
     value: 0,
-    stage,
+    stage: normStage,
     phone: cleanPhone,
     services: Array.isArray(services) ? services : [],
     notes: typeof notes === "string" ? notes : "",

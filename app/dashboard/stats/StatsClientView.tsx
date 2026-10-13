@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { Stage, STAGES } from "@/lib/constants";
+import { Stage, STAGES, normalizeStage } from "@/lib/constants";
 import { Lead, Task, Contact } from "@/lib/db";
 
 // ── Color and Badge Palettes ──────────────────────────────────────────────────
@@ -15,8 +15,8 @@ const STAGE_CONFIG: Record<Stage, {
   gradient: string;
   textColor: string;
 }> = {
-  Initial: {
-    label: "Initial Inquiries",
+  "Initial Contact": {
+    label: "Initial Contact",
     desc: "Fresh leads to contact",
     badge: "bg-blue-50 text-blue-700 border-blue-200/80",
     dot: "bg-blue-500",
@@ -24,32 +24,104 @@ const STAGE_CONFIG: Record<Stage, {
     gradient: "from-blue-500 to-indigo-600",
     textColor: "text-blue-600",
   },
+  Filtered: {
+    label: "Filtered",
+    desc: "Filtered / dropped leads",
+    badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
+    dot: "bg-zinc-400",
+    bar: "bg-zinc-400",
+    gradient: "from-zinc-400 to-zinc-500",
+    textColor: "text-zinc-600",
+  },
   Connected: {
-    label: "In Discussion",
-    desc: "Actively engaged in pipeline",
+    label: "Connected",
+    desc: "Call connected / in discussion",
+    badge: "bg-yellow-50 text-yellow-700 border-yellow-200/80",
+    dot: "bg-yellow-500",
+    bar: "bg-yellow-500",
+    gradient: "from-yellow-400 to-amber-500",
+    textColor: "text-yellow-600",
+  },
+  Interested: {
+    label: "Interested",
+    desc: "Course & university options",
+    badge: "bg-sky-50 text-sky-700 border-sky-200/80",
+    dot: "bg-sky-500",
+    bar: "bg-sky-500",
+    gradient: "from-sky-400 to-cyan-500",
+    textColor: "text-sky-600",
+  },
+  Proposal: {
+    label: "Proposal",
+    desc: "Offer & package proposal shared",
     badge: "bg-amber-50 text-amber-700 border-amber-200/80",
     dot: "bg-amber-500",
     bar: "bg-amber-500",
     gradient: "from-amber-500 to-orange-600",
     textColor: "text-amber-600",
   },
-  Confirmed: {
-    label: "Confirmed Won",
-    desc: "Booking finalized & converted",
+  Registration: {
+    label: "Registration",
+    desc: "Registration completed",
+    badge: "bg-pink-50 text-pink-700 border-pink-200/80",
+    dot: "bg-pink-500",
+    bar: "bg-pink-500",
+    gradient: "from-pink-500 to-rose-600",
+    textColor: "text-pink-600",
+  },
+  "Admission Letter": {
+    label: "Admission Letter",
+    desc: "Admission letter issued",
+    badge: "bg-purple-50 text-purple-700 border-purple-200/80",
+    dot: "bg-purple-500",
+    bar: "bg-purple-500",
+    gradient: "from-purple-500 to-indigo-600",
+    textColor: "text-purple-600",
+  },
+  "2nd Payment": {
+    label: "2nd Payment",
+    desc: "Second payment installment",
+    badge: "bg-teal-50 text-teal-700 border-teal-200/80",
+    dot: "bg-teal-500",
+    bar: "bg-teal-500",
+    gradient: "from-teal-500 to-emerald-600",
+    textColor: "text-teal-600",
+  },
+  OTC: {
+    label: "OTC",
+    desc: "One time charges paid",
+    badge: "bg-indigo-50 text-indigo-700 border-indigo-200/80",
+    dot: "bg-indigo-500",
+    bar: "bg-indigo-500",
+    gradient: "from-indigo-500 to-violet-600",
+    textColor: "text-indigo-600",
+  },
+  Invitation: {
+    label: "Invitation",
+    desc: "Visa invitation received",
+    badge: "bg-violet-50 text-violet-700 border-violet-200/80",
+    dot: "bg-violet-500",
+    bar: "bg-violet-500",
+    gradient: "from-violet-500 to-purple-600",
+    textColor: "text-violet-600",
+  },
+  "3rd Payment": {
+    label: "3rd Payment",
+    desc: "Third payment / fee deposit",
+    badge: "bg-blue-50 text-blue-800 border-blue-200/80",
+    dot: "bg-blue-600",
+    bar: "bg-blue-600",
+    gradient: "from-blue-600 to-indigo-700",
+    textColor: "text-blue-700",
+  },
+  "Visa Process": {
+    label: "Visa Process",
+    desc: "Visa approved & stamped",
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
     dot: "bg-emerald-500",
     bar: "bg-emerald-500",
     gradient: "from-emerald-500 to-teal-600",
     textColor: "text-emerald-600",
-  },
-  Closed: {
-    label: "Closed / Lost",
-    desc: "Unsuccessful / drop-off",
-    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
-    dot: "bg-rose-500",
-    bar: "bg-rose-500",
-    gradient: "from-rose-500 to-red-600",
-    textColor: "text-rose-600",
   },
 };
 
@@ -140,20 +212,27 @@ export default function StatsClientView({
   const totalLeads = filteredLeads.length;
 
   const stageBreakdown = useMemo(() => {
-    const counts: Record<string, number> = { Initial: 0, Connected: 0, Confirmed: 0, Closed: 0 };
-    const values: Record<string, number> = { Initial: 0, Connected: 0, Confirmed: 0, Closed: 0 };
+    const counts: Record<string, number> = {};
+    const values: Record<string, number> = {};
+    for (const s of STAGES) {
+      counts[s] = 0;
+      values[s] = 0;
+    }
 
     for (const l of filteredLeads) {
-      const stg = l.stage in counts ? l.stage : "Initial";
+      const stg = normalizeStage(l.stage);
       counts[stg] = (counts[stg] || 0) + 1;
       values[stg] = (values[stg] || 0) + (l.value || 0);
     }
     return { counts, values };
   }, [filteredLeads]);
 
-  const confirmedCount = stageBreakdown.counts["Confirmed"] || 0;
-  const closedCount = stageBreakdown.counts["Closed"] || 0;
-  const inPipelineCount = (stageBreakdown.counts["Initial"] || 0) + (stageBreakdown.counts["Connected"] || 0);
+  const confirmedCount = stageBreakdown.counts["Visa Process"] || stageBreakdown.counts["Visa Success"] || stageBreakdown.counts["Confirmed"] || 0;
+  const closedCount = stageBreakdown.counts["Filtered"] || stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
+  const inPipelineCount = filteredLeads.filter((l) => {
+    const s = normalizeStage(l.stage);
+    return s !== "Filtered" && s !== "Visa Process";
+  }).length;
 
   // Conversion rates
   const winRate = totalLeads > 0 ? (confirmedCount / totalLeads) * 100 : 0;
@@ -163,13 +242,18 @@ export default function StatsClientView({
 
   // Financial values
   const totalPipelineValue = filteredLeads.reduce((s, l) => s + (l.value || 0), 0);
-  const activePipelineValue = (stageBreakdown.values["Initial"] || 0) + (stageBreakdown.values["Connected"] || 0);
-  const confirmedValue = stageBreakdown.values["Confirmed"] || 0;
+  const activePipelineValue = Object.entries(stageBreakdown.values)
+    .filter(([stg]) => stg !== "Filtered" && stg !== "Visa Process")
+    .reduce((sum, [, val]) => sum + val, 0);
+  const confirmedValue = (stageBreakdown.values["Visa Process"] || 0) + (stageBreakdown.values["Confirmed"] || 0);
 
   // Realized Collected Revenue (firstPayment + secondPayment + thirdPayment + otc)
   const realizedRevenue = useMemo(() => {
     return filteredLeads
-      .filter((l) => l.stage === "Confirmed")
+      .filter((l) => {
+        const s = normalizeStage(l.stage);
+        return s === "Visa Process";
+      })
       .reduce((s, l) => {
         const payments = (l.firstPayment || 0) + (l.secondPayment || 0) + (l.thirdPaymentAmount || 0) + (l.otcAmount || 0);
         return s + (payments > 0 ? payments : (l.value || 0));
@@ -190,10 +274,11 @@ export default function StatsClientView({
       if (!map[ch]) map[ch] = { total: 0, confirmed: 0, closed: 0, value: 0, confirmedValue: 0 };
       map[ch].total++;
       map[ch].value += l.value || 0;
-      if (l.stage === "Confirmed") {
+      const s = normalizeStage(l.stage);
+      if (s === "Visa Process") {
         map[ch].confirmed++;
         map[ch].confirmedValue += l.value || 0;
-      } else if (l.stage === "Closed") {
+      } else if (s === "Filtered") {
         map[ch].closed++;
       }
     }
@@ -229,7 +314,8 @@ export default function StatsClientView({
       if (entry) {
         entry.count++;
         entry.value += lead.value || 0;
-        if (lead.stage === "Confirmed") entry.confirmedCount++;
+        const s = normalizeStage(lead.stage);
+        if (s === "Visa Process" || (s as string) === "Visa Success" || (lead.stage as string) === "Confirmed") entry.confirmedCount++;
       }
     }
     const maxCount = Math.max(1, ...list.map((m) => m.count));
@@ -254,7 +340,7 @@ export default function StatsClientView({
   // ── Top Prospect Opportunities ───────────────────────────────────────────
   const topProspects = useMemo(() => {
     return [...filteredLeads]
-      .filter((l) => l.stage !== "Closed")
+      .filter((l) => normalizeStage(l.stage) !== "Filtered" && (normalizeStage(l.stage) as string) !== "Cold Stage")
       .sort((a, b) => (b.value || 0) - (a.value || 0))
       .slice(0, 6);
   }, [filteredLeads]);

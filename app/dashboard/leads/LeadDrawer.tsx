@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SERVICES, STAGES, type Channel, type Stage } from "@/lib/constants";
+import { COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, type Channel, type Stage } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import SetReminderModal from "./SetReminderModal";
@@ -17,6 +17,7 @@ export type DrawerLead = {
   ownerId?: string;
   whatsappId?: string;
   email?: string;
+  secondaryEmail?: string;
   phone?: string;
   color?: string;
   notes?: string;
@@ -42,6 +43,8 @@ export type DrawerLead = {
   thirdPaymentAmount?: number;
   otcAmount?: number;
   totalServiceCharge?: number;
+  tuitionFee?: number;
+  hostelFee?: number;
   documents?: LeadDocument[];
   proposalDoc?: LeadDocument | null;
   registrationDoc?: LeadDocument | null;
@@ -67,7 +70,7 @@ export type DrawerLead = {
 
 export type LeadUpdate = {
   name: string; stage: Stage;
-  email: string; phone: string; color: string; notes: string;
+  email: string; secondaryEmail?: string; phone: string; color: string; notes: string;
   services?: string[];
   city: string; state: string; neetStatus: string;
   preferredCountry: string; preferredUniversity1: string; preferredUniversity2: string;
@@ -75,6 +78,7 @@ export type LeadUpdate = {
   ownerId: string;
   firstPayment: number; secondPayment: number; thirdPaymentAmount: number;
   otcAmount: number; totalServiceCharge: number;
+  tuitionFee?: number; hostelFee?: number;
   companyName?: string; designation?: string; yearlyVolume?: number;
   rateOfferedCN?: number; rateOfferedCard?: number; rateOfferedTTDD?: number;
   nextFollowUp?: string; feedback?: string; clientVisitStatus?: string;
@@ -92,11 +96,31 @@ const LEAD_COLORS = [
 ];
 
 const NEET_STATUS_OPTIONS = ["", "Appeared", "Passed", "Pending", "Not Applicable"];
-const COUNTRY_OPTIONS = ["Russia", "Kazakhstan", "Kyrgyzstan", "Georgia", "Philippines", "Bangladesh", "Nepal", "China", "Ukraine", "Other"];
 
-const stageColor: Record<string, string> = {
-  Initial: "bg-blue-500", Connected: "bg-amber-500", Confirmed: "bg-emerald-500", Closed: "bg-red-500",
-};
+const POPULAR_UNIVERSITIES = [
+  "Kazan Federal University",
+  "Kursk State Medical University",
+  "Bashkir State Medical University",
+  "First Moscow State Medical University",
+  "Crimea Federal University",
+  "Tbilisi State Medical University",
+  "European University (Georgia)",
+  "Batumi Shota Rustaveli State University",
+  "Kazakh National Medical University",
+  "South Kazakhstan Medical Academy",
+  "Osh State University",
+  "Asian Medical Institute",
+  "International School of Medicine (ISM)",
+  "Samarkand State Medical University",
+  "Tashkent Medical Academy",
+  "China Medical University",
+  "Nanjing Medical University",
+  "Kathmandu University School of Medical Sciences",
+];
+
+const stageColor: Record<string, string> = Object.fromEntries(
+  STAGES.map((s) => [s, STAGE_META[s]?.bar || "bg-blue-500"])
+);
 
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
@@ -421,6 +445,7 @@ export default function LeadDrawer({
   // Contact fields
   const [name, setName] = useState(lead.name);
   const [email, setEmail] = useState(lead.email ?? "");
+  const [secondaryEmail, setSecondaryEmail] = useState(lead.secondaryEmail ?? "");
   const [phone, setPhone] = useState(() => {
     const raw = lead.phone ?? "";
     if (raw === "—") return "";
@@ -468,13 +493,9 @@ export default function LeadDrawer({
   const [color, setColor] = useState(lead.color ?? "");
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
-    const rawList = lead.services && lead.services.length > 0
-      ? lead.services
-      : lead.serviceType
-      ? [lead.serviceType]
-      : [];
-    const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages");
-    return filtered.length > 0 ? filtered : ["Domestic Tours"];
+    if (lead.preferredCountry) return [lead.preferredCountry];
+    if (lead.services && lead.services.length > 0) return lead.services;
+    return [];
   });
   const [stage, setStage] = useState<Stage>(lead.stage);
   const [value, setValue] = useState<number>(lead.value ?? 0);
@@ -484,6 +505,8 @@ export default function LeadDrawer({
   const [thirdPaymentAmount, setThirdPaymentAmount] = useState(lead.thirdPaymentAmount ?? 0);
   const [otcAmount, setOtcAmount] = useState(lead.otcAmount ?? 0);
   const [totalServiceCharge, setTotalServiceCharge] = useState(lead.totalServiceCharge ?? 0);
+  const [tuitionFee, setTuitionFee] = useState<number>(lead.tuitionFee ?? 0);
+  const [hostelFee, setHostelFee] = useState<number>(lead.hostelFee ?? 0);
 
   // Document state
   const [documents, setDocuments] = useState<LeadDocument[]>(lead.documents ?? []);
@@ -527,7 +550,8 @@ export default function LeadDrawer({
   const visaDocInputRef = useRef<HTMLInputElement>(null);
 
   // Stage info
-  const stageIndex = STAGES.indexOf(lead.stage);
+  const normalizedLeadStage = normalizeStage(lead.stage);
+  const stageIndex = Math.max(0, STAGES.indexOf(normalizedLeadStage));
   const nextStage = STAGES[stageIndex + 1] as Stage | undefined;
   const isAtFinalStage = !nextStage;
   const progressPct = Math.round(((stageIndex + 1) / STAGES.length) * 100);
@@ -719,11 +743,12 @@ export default function LeadDrawer({
     const effectiveOwnerId = assignAgentId || lead.ownerId || "";
 
     const result = await onSubmit({
-      name, stage, email, phone, color, notes, services: selectedServices,
-      city, state, neetStatus, preferredCountry, preferredUniversity1, preferredUniversity2,
+      name, stage, email, secondaryEmail, phone, color, notes, services: selectedServices,
+      city, state, neetStatus, preferredCountry: preferredCountry || selectedServices[0] || "", preferredUniversity1, preferredUniversity2,
       assignAgent: assignAgentName,
       ownerId: effectiveOwnerId,
       firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
+      tuitionFee, hostelFee,
       companyName, designation,
       yearlyVolume: yearlyVolume !== "" ? Number(yearlyVolume) : 0,
       rateOfferedCN: rateOfferedCN !== "" ? Number(rateOfferedCN) : 0,
@@ -987,42 +1012,16 @@ export default function LeadDrawer({
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="email@example.com" />
               </FieldRow>
 
-              {/* Dedicated Services Required Row */}
-              <div className="border-b border-zinc-100/90 px-5 py-2.5">
-                <div className="flex items-center gap-2 mb-2">
+              <FieldRow
+                label="Email ID (Secondary)"
+                icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
-                    <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                   </svg>
-                  <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Travel Services Required</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {SERVICES.map((svc) => {
-                    const isSelected = selectedServices.includes(svc);
-                    return (
-                      <label
-                        key={svc}
-                        className={`flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
-                          isSelected
-                            ? "bg-emerald-50/70 border-emerald-500 text-emerald-800 shadow-2xs"
-                            : "bg-zinc-50/60 border-zinc-200 text-zinc-700 hover:bg-zinc-100/70"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            setSelectedServices((prev) =>
-                              prev.includes(svc) ? prev.filter((s) => s !== svc) : [...prev, svc]
-                            );
-                          }}
-                          className="h-3.5 w-3.5 rounded text-blue-600 focus:ring-blue-500 border-zinc-300 cursor-pointer accent-blue-600"
-                        />
-                        <span className="truncate">{svc}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+                }
+              >
+                <input type="email" value={secondaryEmail} onChange={(e) => setSecondaryEmail(e.target.value)} className={inputCls} placeholder="secondary@example.com" />
+              </FieldRow>
 
               <FieldRow
                 label="City"
@@ -1047,28 +1046,106 @@ export default function LeadDrawer({
               </FieldRow>
 
               <SectionHeader
-                label="Pipeline & Assignment"
+                label="Education & Preferences"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-400">
+                    <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                  </svg>
+                }
+              />
+
+              <FieldRow
+                label="NEET Status"
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  </svg>
+                }
+              >
+                <select value={neetStatus} onChange={(e) => setNeetStatus(e.target.value)} className={selectCls}>
+                  <option value="">Select NEET Status</option>
+                  {NEET_STATUS_OPTIONS.filter(Boolean).map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </FieldRow>
+
+              <FieldRow
+                label="Preferred Country"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+                  </svg>
+                }
+              >
+                <select
+                  value={preferredCountry}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setPreferredCountry(c);
+                    if (c && !selectedServices.includes(c)) {
+                      setSelectedServices((prev) => [c, ...prev.filter((x) => x !== c)]);
+                    }
+                  }}
+                  className={selectCls}
+                >
+                  <option value="">Select Preferred Country</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </FieldRow>
+
+              <FieldRow
+                label="Preferred University 1"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <path d="M3 21h18M5 21V7l7-4 7 4v14M9 10v4M15 10v4"/>
+                  </svg>
+                }
+              >
+                <input
+                  list="universities-list"
+                  value={preferredUniversity1}
+                  onChange={(e) => setPreferredUniversity1(e.target.value)}
+                  className={inputCls}
+                  placeholder="Select or enter University 1"
+                />
+              </FieldRow>
+
+              <FieldRow
+                label="Preferred University 2"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <path d="M3 21h18M5 21V7l7-4 7 4v14M9 10v4M15 10v4"/>
+                  </svg>
+                }
+              >
+                <input
+                  list="universities-list"
+                  value={preferredUniversity2}
+                  onChange={(e) => setPreferredUniversity2(e.target.value)}
+                  className={inputCls}
+                  placeholder="Select or enter University 2"
+                />
+              </FieldRow>
+              <datalist id="universities-list">
+                {POPULAR_UNIVERSITIES.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+
+              <SectionHeader
+                label="Pipeline & Assignment"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-400">
                     <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
                   </svg>
                 }
               />
-              <FieldRow
-                label="Channel"
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                  </svg>
-                }
-              >
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-800">
-                  {lead.channel}
-                </span>
-              </FieldRow>
 
               <FieldRow
-                label="Revenue (₹)"
+                label="Sale"
                 icon={
                   <span className="text-xs font-bold text-zinc-400">₹</span>
                 }
@@ -1087,7 +1164,7 @@ export default function LeadDrawer({
               </FieldRow>
 
               <FieldRow
-                label="Assign User"
+                label="Assign agent"
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
@@ -1099,7 +1176,7 @@ export default function LeadDrawer({
                   onChange={(e) => setAssignAgentId(e.target.value)}
                   className={selectCls}
                 >
-                  <option value="">Unassigned</option>
+                  <option value="">Select agent</option>
                   {teamMembers.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} {m.id === currentUserId && currentUserId !== "__admin__" ? "(You)" : ""} {m.isLeadPaused ? `(Paused${m.leadPauseReason ? `: ${m.leadPauseReason}` : ""})` : ""}
@@ -1115,6 +1192,19 @@ export default function LeadDrawer({
               </FieldRow>
 
               <FieldRow
+                label="Channel"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                }
+              >
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-800">
+                  {lead.channel}
+                </span>
+              </FieldRow>
+
+              <FieldRow
                 label="Stage"
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
@@ -1122,27 +1212,23 @@ export default function LeadDrawer({
                   </svg>
                 }
               >
-                {isAtFinalStage ? (
-                  <span className="text-xs text-emerald-700 font-bold inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
-                    {lead.stage}
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </span>
-                ) : (
-                  <select
-                    value={stage}
-                    onChange={(e) => {
-                      const newStage = e.target.value as Stage;
-                      setStage(newStage);
-                      if (newStage === "Confirmed" && lead.stage !== "Confirmed") {
-                        setShowStageConfirm(true);
-                      }
-                    }}
-                    className={selectCls}
-                  >
-                    <option value={lead.stage}>{lead.stage} (current)</option>
-                    <option value={nextStage!}>→ {nextStage}</option>
-                  </select>
-                )}
+                <select
+                  value={stage}
+                  onChange={(e) => {
+                    const newStage = e.target.value as Stage;
+                    setStage(newStage);
+                    if ((newStage === "Visa Process" || (newStage as string) === "Visa Success" || (newStage as string) === "Confirmed") && (lead.stage as string) !== "Visa Process" && (lead.stage as string) !== "Visa Success" && (lead.stage as string) !== "Confirmed") {
+                      setShowStageConfirm(true);
+                    }
+                  }}
+                  className={selectCls}
+                >
+                  {STAGES.map((s) => (
+                    <option key={s} value={s}>
+                      {s} {s === lead.stage ? "(current)" : ""}
+                    </option>
+                  ))}
+                </select>
               </FieldRow>
 
               <FieldRow
@@ -1181,14 +1267,128 @@ export default function LeadDrawer({
               </FieldRow>
 
               <SectionHeader
-                label="Documents"
+                label="Fees & Payments"
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+                  </svg>
+                }
+              />
+              <FieldRow label="1st Payment" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={firstPayment === 0 ? "" : firstPayment}
+                    onChange={(e) => setFirstPayment(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="2nd Payment" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={secondPayment === 0 ? "" : secondPayment}
+                    onChange={(e) => setSecondPayment(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="3rd Payment" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={thirdPaymentAmount === 0 ? "" : thirdPaymentAmount}
+                    onChange={(e) => setThirdPaymentAmount(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="OTC" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={otcAmount === 0 ? "" : otcAmount}
+                    onChange={(e) => setOtcAmount(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="Total Service Charge" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={totalServiceCharge === 0 ? "" : totalServiceCharge}
+                    onChange={(e) => setTotalServiceCharge(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="Tuition Fee" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={tuitionFee === 0 ? "" : tuitionFee}
+                    onChange={(e) => setTuitionFee(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <FieldRow label="Hostel Fee" icon={<span className="text-xs font-bold text-zinc-400">₹</span>}>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-zinc-400 select-none">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={hostelFee === 0 ? "" : hostelFee}
+                    onChange={(e) => setHostelFee(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`${inputCls} pl-6 font-bold`}
+                    placeholder="0"
+                  />
+                </div>
+              </FieldRow>
+
+              <SectionHeader
+                label="Stage Documents & Invoices"
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                   </svg>
                 }
               />
-              <ArrayDocRow label="Upload Documents" docs={documents} uploading={uploadingDoc} inputRef={docInputRef} onUpload={handleUploadDoc} onDelete={handleDeleteDoc} />
+              <SingleDocRow label="Upload Proposal Documents" doc={proposalDoc} uploading={uploadingProposal} inputRef={proposalDocRef} onUpload={handleUploadProposal} onDelete={handleDeleteProposal} />
+              <SingleDocRow label="Upload Registration Invoice" doc={registrationDoc} uploading={uploadingRegistration} inputRef={registrationDocRef} onUpload={handleUploadRegistration} onDelete={handleDeleteRegistration} />
+              <SingleDocRow label="Admission Letter/Offer Letter Upload" doc={admissionLetter} uploading={uploadingLetter} inputRef={letterInputRef} onUpload={handleUploadLetter} onDelete={handleDeleteLetter} />
+              <ArrayDocRow label="2nd Payment invoice Upload" docs={invoices} uploading={uploadingInvoice} inputRef={invoiceInputRef} onUpload={handleUploadInvoice} onDelete={handleDeleteInvoice} />
+              <ArrayDocRow label="OTC Payment Invoice Upload" docs={otcInvoices} uploading={uploadingOtcInvoice} inputRef={otcInvoiceInputRef} onUpload={handleUploadOtcInvoice} onDelete={handleDeleteOtcInvoice} />
+              <SingleDocRow label="Invitation letter upload" doc={invitationLetter} uploading={uploadingInvitationLetter} inputRef={invitationLetterInputRef} onUpload={handleUploadInvitationLetter} onDelete={handleDeleteInvitationLetter} />
+              <ArrayDocRow label="3rd Payment invoice upload" docs={thirdPaymentInvoices} uploading={uploadingThirdPaymentInvoice} inputRef={thirdPaymentInvoiceInputRef} onUpload={handleUploadThirdPaymentInvoice} onDelete={handleDeleteThirdPaymentInvoice} />
+              <ArrayDocRow label="Visa upload" docs={visaDocuments} uploading={uploadingVisaDoc} inputRef={visaDocInputRef} onUpload={handleUploadVisaDoc} onDelete={handleDeleteVisaDoc} />
+              <ArrayDocRow label="General Documents" docs={documents} uploading={uploadingDoc} inputRef={docInputRef} onUpload={handleUploadDoc} onDelete={handleDeleteDoc} />
 
               {(() => {
                 const cleanedLines = lead.formNotes
@@ -1516,12 +1716,14 @@ export default function LeadDrawer({
         </div>
 
         {/* ── Stage change confirmation overlay ─────────────────────────────── */}
-        {showStageConfirm && (
+        {showStageConfirm && (() => {
+          const isSuccessStage = stage === "Visa Process" || (stage as string) === "Visa Success" || (stage as string) === "Confirmed";
+          return (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowStageConfirm(false)}>
             <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 pt-5 pb-4">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-full mb-3 ${stage === "Confirmed" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
-                  {stage === "Confirmed" ? (
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full mb-3 ${isSuccessStage ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                  {isSuccessStage ? (
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -1533,13 +1735,13 @@ export default function LeadDrawer({
                   )}
                 </div>
                 <h3 className="text-base font-bold text-zinc-900 mb-1">
-                  {stage === "Confirmed" ? "Deal Confirmed!" : "Move to next stage?"}
+                  {isSuccessStage ? "Visa Success Confirmed!" : "Move to next stage?"}
                 </h3>
                 <p className="text-sm text-zinc-500">
-                  {stage === "Confirmed" ? (
+                  {isSuccessStage ? (
                     <>
                       Advance <span className="font-semibold text-zinc-800">{lead.name}</span> to{" "}
-                      <span className="font-semibold text-emerald-600">Confirmed</span>. Enter the confirmed revenue for this deal below:
+                      <span className="font-semibold text-emerald-600">Visa Success</span>. Enter the confirmed revenue for this deal below:
                     </>
                   ) : (
                     <>
@@ -1550,7 +1752,7 @@ export default function LeadDrawer({
                   )}
                 </p>
 
-                {stage === "Confirmed" && (
+                {isSuccessStage && (
                   <div className="mt-4">
                     <label className="block text-xs font-bold text-zinc-700 mb-1.5">
                       Deal Revenue (₹)
@@ -1595,15 +1797,16 @@ export default function LeadDrawer({
                   onClick={() => { setShowStageConfirm(false); doSubmit(); }}
                   disabled={loading}
                   className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60 ${
-                    stage === "Confirmed" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-brand-600 hover:bg-brand-700"
+                    isSuccessStage ? "bg-emerald-600 hover:bg-emerald-700" : "bg-brand-600 hover:bg-brand-700"
                   }`}
                 >
-                  {loading ? "Moving..." : stage === "Confirmed" ? "Confirm Deal" : "Confirm"}
+                  {loading ? "Moving..." : isSuccessStage ? "Confirm Deal" : "Confirm"}
                 </button>
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── Footer ─────────────────────────────────────────────────────────── */}
         <div className="flex-none flex items-center justify-between gap-3 px-5 py-3.5 border-t border-zinc-200/80 bg-zinc-50/50 backdrop-blur-xs">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CHANNELS, STAGES } from "@/lib/constants";
+import { ALL_VALID_STAGES, CHANNELS, normalizeStage } from "@/lib/constants";
 import { createLead, getAllLeads, getLeadsByOwner } from "@/lib/db";
 import { getSession } from "@/lib/session";
 
@@ -29,11 +29,12 @@ export async function POST(request: NextRequest) {
     assignAgent, firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
   } = body ?? {};
   const cleanPhone = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+  const normStage = normalizeStage(stage);
 
   if (
     typeof name !== "string" || !name.trim() ||
     !CHANNELS.includes(channel) ||
-    !STAGES.includes(stage) ||
+    !ALL_VALID_STAGES.includes(stage as any) ||
     cleanPhone.length !== 10
   ) {
     return NextResponse.json({ error: "Please enter a valid name, channel, stage, and 10-digit phone number." }, { status: 400 });
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     name: name.trim(),
     channel,
     value: typeof value === "number" && value >= 0 ? value : 0,
-    stage,
+    stage: normStage,
     phone: cleanPhone,
     email: typeof email === "string" ? email.trim() : undefined,
     city: typeof city === "string" ? city.trim() : undefined,
