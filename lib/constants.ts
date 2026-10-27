@@ -264,7 +264,7 @@ export const OPERATING_CITIES = [
   "Kochi",
 ] as const;
 
-export const DEFAULT_USER_PASSWORD = "EduFin@2026";
+export const DEFAULT_USER_PASSWORD = "Edufin@2026";
 
 export const BRANCHES = [
   { id: "br-delhi-01", name: "Delhi NCR Branch", city: "Delhi NCR" },
