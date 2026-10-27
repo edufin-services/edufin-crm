@@ -929,7 +929,7 @@ export async function restoreLeadAdmin(id: string): Promise<Lead | undefined> {
       leadName: l.name,
       channel: l.channel,
       ownerId: l.ownerId,
-      previousStage: "Filtered",
+      previousStage: "Closed",
       newStage: "Initial Contact",
       details: `Admin restored lead to Initial Contact stage`,
     }).catch((err) => console.error("[audit] restoreLeadAdmin log error:", err));
@@ -950,7 +950,7 @@ export async function restoreLead(id: string, ownerId: string): Promise<Lead | u
       leadName: l.name,
       channel: l.channel,
       ownerId: l.ownerId,
-      previousStage: "Filtered",
+      previousStage: "Closed",
       newStage: "Initial Contact",
       details: `Lead restored to Initial Contact stage`,
     }).catch((err) => console.error("[audit] restoreLead log error:", err));

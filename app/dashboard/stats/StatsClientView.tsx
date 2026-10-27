@@ -24,15 +24,6 @@ const STAGE_CONFIG: Record<Stage, {
     gradient: "from-blue-500 to-indigo-600",
     textColor: "text-blue-600",
   },
-  Filtered: {
-    label: "Filtered",
-    desc: "Filtered / dropped leads",
-    badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
-    dot: "bg-zinc-400",
-    bar: "bg-zinc-400",
-    gradient: "from-zinc-400 to-zinc-500",
-    textColor: "text-zinc-600",
-  },
   Connected: {
     label: "Connected",
     desc: "Call connected / in discussion",
@@ -228,10 +219,10 @@ export default function StatsClientView({
   }, [filteredLeads]);
 
   const confirmedCount = stageBreakdown.counts["Visa Process"] || stageBreakdown.counts["Visa Success"] || stageBreakdown.counts["Confirmed"] || 0;
-  const closedCount = stageBreakdown.counts["Filtered"] || stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
+  const closedCount = stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
   const inPipelineCount = filteredLeads.filter((l) => {
     const s = normalizeStage(l.stage);
-    return s !== "Filtered" && s !== "Visa Process";
+    return s !== "Visa Process";
   }).length;
 
   // Conversion rates
@@ -243,7 +234,7 @@ export default function StatsClientView({
   // Financial values
   const totalPipelineValue = filteredLeads.reduce((s, l) => s + (l.value || 0), 0);
   const activePipelineValue = Object.entries(stageBreakdown.values)
-    .filter(([stg]) => stg !== "Filtered" && stg !== "Visa Process")
+    .filter(([stg]) => stg !== "Visa Process")
     .reduce((sum, [, val]) => sum + val, 0);
   const confirmedValue = (stageBreakdown.values["Visa Process"] || 0) + (stageBreakdown.values["Confirmed"] || 0);
 
@@ -278,7 +269,7 @@ export default function StatsClientView({
       if (s === "Visa Process") {
         map[ch].confirmed++;
         map[ch].confirmedValue += l.value || 0;
-      } else if (s === "Filtered") {
+      } else if ((s as string) === "Closed" || (s as string) === "Cold Stage") {
         map[ch].closed++;
       }
     }
@@ -340,7 +331,7 @@ export default function StatsClientView({
   // ── Top Prospect Opportunities ───────────────────────────────────────────
   const topProspects = useMemo(() => {
     return [...filteredLeads]
-      .filter((l) => normalizeStage(l.stage) !== "Filtered" && (normalizeStage(l.stage) as string) !== "Cold Stage")
+      .filter((l) => (normalizeStage(l.stage) as string) !== "Cold Stage" && (normalizeStage(l.stage) as string) !== "Closed")
       .sort((a, b) => (b.value || 0) - (a.value || 0))
       .slice(0, 6);
   }, [filteredLeads]);

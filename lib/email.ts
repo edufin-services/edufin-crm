@@ -2,7 +2,6 @@ import nodemailer from "nodemailer";
 
 // All stages after "Initial Contact" that can trigger an email to the lead
 export const EMAIL_STAGES = new Set([
-  "Filtered",
   "Connected",
   "Interested",
   "Proposal",
@@ -30,11 +29,6 @@ export const EMAIL_STAGES = new Set([
 type Template = { subject: string; heading: string; body: string };
 
 const STAGE_TEMPLATES: Record<string, Template> = {
-  Filtered: {
-    subject: "Application Update - In Review",
-    heading: "Application Under Review",
-    body: "Your application is currently being evaluated by our admissions team. We will reach out shortly with any further requirements.",
-  },
   Shiksha: {
     subject: "Welcome to EduFin Services - Education Consultation",
     heading: "Consultation In Progress",

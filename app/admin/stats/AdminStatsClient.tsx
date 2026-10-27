@@ -24,15 +24,6 @@ const STAGE_CONFIG: Record<Stage, {
     gradient: "from-blue-500 to-indigo-600",
     textColor: "text-blue-600",
   },
-  Filtered: {
-    label: "Filtered",
-    desc: "Filtered / dropped leads",
-    badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
-    dot: "bg-zinc-400",
-    bar: "bg-zinc-400",
-    gradient: "from-zinc-400 to-zinc-500",
-    textColor: "text-zinc-600",
-  },
   Connected: {
     label: "Connected",
     desc: "Call connected / in discussion",
@@ -243,10 +234,10 @@ export default function AdminStatsClient({
   }, [filteredLeads]);
 
   const confirmedCount = stageBreakdown.counts["Visa Process"] || stageBreakdown.counts["Visa Success"] || stageBreakdown.counts["Confirmed"] || 0;
-  const closedCount = stageBreakdown.counts["Filtered"] || stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
+  const closedCount = stageBreakdown.counts["Cold Stage"] || stageBreakdown.counts["Closed"] || 0;
   const inPipelineCount = filteredLeads.filter((l) => {
     const s = normalizeStage(l.stage);
-    return s !== "Filtered" && s !== "Visa Process";
+    return s !== "Visa Process";
   }).length;
 
   // Conversion rates
@@ -258,7 +249,7 @@ export default function AdminStatsClient({
   // Financial values
   const totalPipelineValue = filteredLeads.reduce((s, l) => s + (l.value || 0), 0);
   const activePipelineValue = Object.entries(stageBreakdown.values)
-    .filter(([stg]) => stg !== "Filtered" && stg !== "Visa Process")
+    .filter(([stg]) => stg !== "Visa Process")
     .reduce((sum, [, val]) => sum + val, 0);
   const confirmedValue = (stageBreakdown.values["Visa Process"] || 0) + (stageBreakdown.values["Confirmed"] || 0);
 
@@ -287,7 +278,7 @@ export default function AdminStatsClient({
     const summarize = (list: Lead[], name: string, region: string) => {
       const count = list.length;
       const confirmed = list.filter((l) => normalizeStage(l.stage) === "Visa Process").length;
-      const closed = list.filter((l) => normalizeStage(l.stage) === "Filtered").length;
+      const closed = list.filter((l) => (normalizeStage(l.stage) as string) === "Closed" || (normalizeStage(l.stage) as string) === "Cold Stage").length;
       const value = list.reduce((s, l) => s + (l.value || 0), 0);
       const win = count > 0 ? Math.round((confirmed / count) * 100) : 0;
       return { name, region, count, confirmed, closed, value, win };
@@ -312,7 +303,7 @@ export default function AdminStatsClient({
       if (s === "Visa Process") {
         map[ch].confirmed++;
         map[ch].confirmedValue += l.value || 0;
-      } else if (s === "Filtered") {
+      } else if ((s as string) === "Closed" || (s as string) === "Cold Stage") {
         map[ch].closed++;
       }
     }
@@ -374,7 +365,7 @@ export default function AdminStatsClient({
         entry.confirmed++;
         entry.confirmedValue += l.value || 0;
       }
-      if (stg === "Filtered") entry.closed++;
+      if ((stg as string) === "Closed" || (stg as string) === "Cold Stage") entry.closed++;
     }
 
     let list = Object.values(statsByUser).map((item) => {
@@ -698,7 +689,7 @@ export default function AdminStatsClient({
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Initial Contact</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-yellow-500" /> Connected</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Visa Process</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Filtered</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Closed / Dropped</span>
           </div>
         </div>
 
@@ -760,16 +751,16 @@ export default function AdminStatsClient({
           <div className="rounded-2xl border border-rose-200/80 bg-gradient-to-b from-rose-50/40 to-white p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-rose-700">
-                Filtered · Dropped
+                Closed · Dropped
               </span>
               <span className="text-xs font-black text-rose-600">{lossRate.toFixed(1)}%</span>
             </div>
             <div>
-              <p className="text-xs font-bold text-zinc-500">Filtered / Dropped</p>
+              <p className="text-xs font-bold text-zinc-500">Closed / Dropped</p>
               <p className="text-2xl font-black text-rose-700 tracking-tight">{closedCount}</p>
             </div>
             <div className="pt-2 border-t border-rose-100 text-[11px] text-zinc-500 font-medium">
-              Lost Potential: <strong className="text-rose-700">{formatINR(stageBreakdown.values["Filtered"] || stageBreakdown.values["Cold Stage"] || stageBreakdown.values["Closed"] || 0)}</strong>
+              Lost Potential: <strong className="text-rose-700">{formatINR(stageBreakdown.values["Cold Stage"] || stageBreakdown.values["Closed"] || 0)}</strong>
             </div>
           </div>
         </div>

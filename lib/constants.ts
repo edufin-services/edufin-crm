@@ -16,7 +16,6 @@ export type Service = CountryOption;
 
 export const STAGES = [
   "Initial Contact",
-  "Filtered",
   "Connected",
   "Interested",
   "Proposal",
@@ -31,6 +30,7 @@ export const STAGES = [
 export type Stage = (typeof STAGES)[number];
 
 export const LEGACY_STAGES = [
+  "Filtered",
   "Initial",
   "Cold Stage",
   "Hot Stage",
@@ -54,7 +54,6 @@ export function normalizeStage(stage: string | null | undefined): Stage {
   const lower = trimmed.toLowerCase();
 
   if (lower === "initial" || lower === "initial contact" || lower === "shiksha") return "Initial Contact";
-  if (lower === "filtered" || lower === "cold" || lower === "cold stage" || lower === "closed") return "Filtered";
   if (lower === "connected") return "Connected";
   if (lower === "interested") return "Interested";
   if (lower === "proposal" || lower === "hot" || lower === "hot stage") return "Proposal";
@@ -74,7 +73,6 @@ export function normalizeStage(stage: string | null | undefined): Stage {
 
 export const STAGE_LABELS: Record<Stage, string> = {
   "Initial Contact": "INITIAL CONTACT",
-  "Filtered": "FILTERED",
   "Connected": "CONNECTED",
   "Interested": "INTERESTED",
   "Proposal": "PROPOSAL",
@@ -104,14 +102,6 @@ export const STAGE_META: Record<Stage, StageMetaConfig> = {
     text: "text-blue-600",
     border: "border-blue-400",
     lineColor: "bg-sky-400 border-dashed",
-  },
-  "Filtered": {
-    dot: "bg-sky-400",
-    bar: "bg-sky-400",
-    badge: "bg-sky-50 text-sky-700 border-sky-200",
-    text: "text-sky-600",
-    border: "border-sky-400",
-    lineColor: "bg-sky-400",
   },
   "Connected": {
     dot: "bg-amber-400",

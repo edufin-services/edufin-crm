@@ -37,7 +37,7 @@ export default async function AdminDashboardPage() {
   const effectiveRevenue = totalRevenue > 0 ? totalRevenue : totalDealValue;
   const activeInPipeline = leads.filter((l) => {
     const s = normalizeStage(l.stage);
-    return s !== "Filtered" && s !== "Visa Process";
+    return s !== "Visa Process";
   }).length;
 
   // Leads per user owner
@@ -78,15 +78,6 @@ export default async function AdminDashboardPage() {
       text: "text-blue-700",
       badge: "bg-blue-50 text-blue-700 border-blue-200/80",
       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>,
-    },
-    Filtered: {
-      label: "Filtered",
-      desc: "Filtered / dropped leads",
-      dot: "bg-zinc-400",
-      bar: "bg-zinc-400",
-      text: "text-zinc-700",
-      badge: "bg-zinc-50 text-zinc-700 border-zinc-200/80",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
     },
     Connected: {
       label: "Connected",
