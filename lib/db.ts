@@ -1310,6 +1310,43 @@ export async function getUsersByBranch(branchCityOrKey: string): Promise<User[]>
   });
 }
 
+export async function getNextRoundRobinUser(): Promise<User | undefined> {
+  await dbConnect();
+  const allUsers = await getAllUsers();
+
+  // Prefer counselor users (role === "user" or default).
+  // Filter out any user whose lead directing is paused.
+  let eligibleUsers = allUsers.filter(
+    (u) => !u.isLeadPaused && ((u as any).role === "user" || !(u as any).role)
+  );
+
+  if (eligibleUsers.length === 0) {
+    eligibleUsers = allUsers.filter((u) => !u.isLeadPaused);
+  }
+
+  // If only 1 user exists in CRM (e.g. Komal Jha), she receives all leads directly
+  if (eligibleUsers.length === 1) {
+    return eligibleUsers[0];
+  }
+
+  // When new users/counselors are created, rotate leads evenly via atomic round-robin counter
+  if (eligibleUsers.length > 1) {
+    const updatedSettings = await AdminSettingsModel.findOneAndUpdate(
+      { id: "admin_settings" },
+      { $inc: { metaRoundRobinIndex: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    const counter = Math.abs((updatedSettings as any)?.metaRoundRobinIndex || 0);
+    const idx = counter % eligibleUsers.length;
+    return eligibleUsers[idx];
+  }
+
+  // Fallback if all users are paused: return first user so lead is not dropped
+  if (allUsers.length > 0) return allUsers[0];
+  return undefined;
+}
+
 export async function getNextBranchUserRoundRobin(branchCityOrKey: string): Promise<User | undefined> {
   await dbConnect();
   const lower = (branchCityOrKey || "").toLowerCase().trim();
@@ -1336,27 +1373,8 @@ export async function getNextBranchUserRoundRobin(branchCityOrKey: string): Prom
     return activeBranchUsers[idx];
   }
 
-  // If no active users in this branch, find any active user across the entire CRM
-  const allUsers = await getAllUsers();
-  const allActiveUsers = allUsers.filter((u) => !u.isLeadPaused);
-
-  if (allActiveUsers.length > 0) {
-    if (allActiveUsers.length === 1) {
-      return allActiveUsers[0];
-    }
-    const updatedSettings = await AdminSettingsModel.findOneAndUpdate(
-      { id: "admin_settings" },
-      { $inc: { globalRoundRobinIndex: 1 } },
-      { upsert: true, returnDocument: "after" }
-    );
-    const idx = Math.abs((updatedSettings as any)?.globalRoundRobinIndex || 0) % allActiveUsers.length;
-    return allActiveUsers[idx];
-  }
-
-  // Emergency fallback if ALL users are paused: return first user so lead is not dropped
-  if (branchUsers.length > 0) return branchUsers[0];
-  if (allUsers.length > 0) return allUsers[0];
-  return undefined;
+  // Fallback to global user round-robin
+  return getNextRoundRobinUser();
 }
 
 export async function getBranchById(id: string) {
@@ -1466,6 +1484,10 @@ export type AdminSettings = {
   companyIndustry?: string;
   companyTimezone?: string;
   passwordHash?: string;
+  metaRoundRobinIndex?: number;
+  globalRoundRobinIndex?: number;
+  metaPageAccessToken?: string;
+  metaVerifyToken?: string;
 };
 
 export async function getAdminSettings(): Promise<AdminSettings> {

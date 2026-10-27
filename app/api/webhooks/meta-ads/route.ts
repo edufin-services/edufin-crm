@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createLead, getAllUsers, getNextBranchUserRoundRobin } from "@/lib/db";
+import { createLead, getNextRoundRobinUser } from "@/lib/db";
 import { AdminSettingsModel, LeadModel } from "@/lib/models";
 import { dbConnect } from "@/lib/mongoose";
+
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+  "West Bengal", "Delhi", "Delhi NCR", "Jammu and Kashmir", "Ladakh", "Chandigarh"
+];
+
+const COUNTRY_CANDIDATES = [
+  "Russia", "China", "Kazakhstan", "Kyrgyzstan", "Georgia", "Uzbekistan", "Nepal"
+];
 
 // ── GET: Webhook Verification Endpoint for Meta ──────────────────────────────
 // When you click "Verify and save" in Meta for Developers, Meta sends a GET request
@@ -12,10 +24,16 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const expectedToken = process.env.META_VERIFY_TOKEN || "fx_meta_leads_token_2026";
+  await dbConnect();
+  const adminSettings = await AdminSettingsModel.findOne({ id: "admin_settings" }).lean();
+
+  const expectedToken =
+    process.env.META_VERIFY_TOKEN ||
+    (adminSettings as any)?.metaVerifyToken ||
+    "fx_meta_leads_token_2026";
 
   if (mode === "subscribe" && token === expectedToken) {
-    console.log("Meta Webhook verified successfully!");
+    console.log("[Meta Webhook] Verified successfully with token:", token);
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
@@ -29,7 +47,7 @@ export async function GET(request: NextRequest) {
 function extractMetaField(fieldData: Array<{ name: string; values: string[] }>, keys: string[]): string {
   if (!Array.isArray(fieldData)) return "";
   for (const field of fieldData) {
-    const normName = field.name.toLowerCase().replace(/[\s_-]+/g, "");
+    const normName = (field.name || "").toLowerCase().replace(/[\s_-]+/g, "");
     for (const key of keys) {
       if (normName === key.toLowerCase().replace(/[\s_-]+/g, "") && field.values?.[0]) {
         return String(field.values[0]).trim();
@@ -39,12 +57,40 @@ function extractMetaField(fieldData: Array<{ name: string; values: string[] }>, 
   return "";
 }
 
+// Helper to deduce state from text if form didn't provide a direct state field
+function detectIndianState(text: string): string {
+  const lower = text.toLowerCase();
+  for (const st of INDIAN_STATES) {
+    const stLower = st.toLowerCase();
+    // Match word boundaries
+    const regex = new RegExp(`\\b${stLower.replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (regex.test(lower)) {
+      return st;
+    }
+  }
+  // Short matches
+  if (/\bup\b/i.test(lower) && !lower.includes("support")) return "Uttar Pradesh";
+  if (/\bmp\b/i.test(lower)) return "Madhya Pradesh";
+  if (/\bwb\b/i.test(lower)) return "West Bengal";
+  if (/\bncr\b/i.test(lower)) return "Delhi NCR";
+  return "";
+}
+
+// Helper to deduce preferred country from text
+function detectCountry(text: string): string {
+  const lower = text.toLowerCase();
+  for (const c of COUNTRY_CANDIDATES) {
+    if (lower.includes(c.toLowerCase())) return c;
+  }
+  return "";
+}
+
 // ── POST: Receive Real-Time Lead from Meta Lead Ads ─────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
-    if (!body || body.object !== "page") {
-      return NextResponse.json({ error: "Invalid event object" }, { status: 400 });
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
 
     await dbConnect();
@@ -55,6 +101,72 @@ export async function POST(request: NextRequest) {
       process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
       (adminSettings as any)?.metaPageAccessToken ||
       "";
+
+    // ── Case A: Direct Test Lead / Simulator Payload ───────────────────────
+    if (body.test === true || (body.name && (body.phone || body.mobile))) {
+      const rawPhone = String(body.phone || body.mobile || "").trim();
+      const digits = rawPhone.replace(/\D/g, "");
+      let cleanPhone = digits;
+      if (digits.length === 12 && digits.startsWith("91")) cleanPhone = digits.slice(2);
+      else if (digits.length === 11 && digits.startsWith("0")) cleanPhone = digits.slice(1);
+      else if (digits.length > 10) cleanPhone = digits.slice(-10);
+
+      // Check duplicate
+      if (cleanPhone && cleanPhone.length >= 7) {
+        const existing = await LeadModel.findOne({
+          deletedAt: null,
+          phone: { $regex: cleanPhone },
+        });
+        if (existing) {
+          return NextResponse.json({
+            status: "skipped_duplicate",
+            message: `Lead with phone ${cleanPhone} already exists.`,
+            leadId: existing.id,
+          });
+        }
+      }
+
+      // Round-Robin Distribution
+      const assignedUser = await getNextRoundRobinUser();
+      const assignedOwnerId = assignedUser?.id || "admin";
+      const assignedOwnerName = assignedUser?.name || "Admin";
+
+      const leadState = body.state || detectIndianState(`${body.campaign || ""} ${body.adset || ""} ${body.city || ""}`) || "";
+      const leadCountry = body.preferredCountry || detectCountry(`${body.notes || ""} ${body.campaign || ""}`) || "";
+      const campaignName = body.campaign || "State-wise";
+
+      const created = await createLead({
+        ownerId: assignedOwnerId,
+        assignAgent: assignedOwnerName,
+        name: String(body.name).trim(),
+        phone: cleanPhone || rawPhone || "—",
+        email: body.email ? String(body.email).trim() : "",
+        city: body.city || undefined,
+        state: leadState || undefined,
+        neetStatus: body.neetStatus || undefined,
+        preferredCountry: leadCountry || undefined,
+        channel: "Meta Ads",
+        stage: "Initial Contact",
+        value: 0,
+        notes: `Campaign: ${campaignName}${body.adset ? ` · AdSet: ${body.adset}` : ""}`,
+        formNotes: body.formNotes || (leadState ? `• State: ${leadState}` : ""),
+        services: leadCountry ? [leadCountry] : ["Others"],
+        serviceType: leadCountry || "Others",
+      });
+
+      return NextResponse.json({
+        success: true,
+        status: "created",
+        leadId: created.id,
+        assignedTo: { id: assignedOwnerId, name: assignedOwnerName },
+        message: `Lead successfully routed to ${assignedOwnerName} via Round-Robin.`,
+      });
+    }
+
+    // ── Case B: Official Meta Webhook Event (object === "page") ─────────────
+    if (body.object !== "page") {
+      return NextResponse.json({ error: "Invalid event object, expected 'page'." }, { status: 400 });
+    }
 
     const entries = Array.isArray(body.entry) ? body.entry : [];
     const results = [];
@@ -75,15 +187,18 @@ export async function POST(request: NextRequest) {
         let leadPhone = "";
         let leadEmail = "";
         let leadCity = "";
+        let leadState = "";
+        let leadNeetStatus = "";
+        let leadPreferredCountry = "";
         let leadPlatform = "Facebook";
         let apiError = "";
         const extraFormFields: string[] = [];
 
-        let campaignName = "";
+        let campaignName = "State-wise"; // Default to State-wise campaign
         let adsetName = "";
         let adName = "";
 
-        // 1. If we have a Page Access Token, fetch lead details from Meta Graph API
+        // 1. Fetch details from Meta Graph API using pageAccessToken
         if (pageAccessToken) {
           try {
             const graphRes = await fetch(
@@ -92,12 +207,12 @@ export async function POST(request: NextRequest) {
             const leadData = await graphRes.json().catch(() => null);
 
             if (graphRes.ok && leadData) {
-              campaignName = leadData.campaign_name || "";
+              if (leadData.campaign_name) campaignName = leadData.campaign_name;
               adsetName = leadData.adset_name || "";
               adName = leadData.ad_name || "";
 
               // If campaign name is not populated directly on leadgen, fetch via campaign_id
-              if (!campaignName && leadData.campaign_id) {
+              if (!leadData.campaign_name && leadData.campaign_id) {
                 try {
                   const campRes = await fetch(
                     `https://graph.facebook.com/v21.0/${leadData.campaign_id}?fields=name&access_token=${pageAccessToken}`
@@ -139,6 +254,7 @@ export async function POST(request: NextRequest) {
                 "first_name",
                 "customer_name",
                 "your_name",
+                "student_name",
               ]);
               const extractedPhone = extractMetaField(fieldData, [
                 "phone_number",
@@ -147,15 +263,44 @@ export async function POST(request: NextRequest) {
                 "mobile_number",
                 "contact_number",
                 "mobile",
+                "student_phone",
               ]);
               const extractedEmail = extractMetaField(fieldData, [
                 "email",
                 "email_address",
+                "student_email",
               ]);
               const extractedCity = extractMetaField(fieldData, [
                 "city",
                 "location",
                 "current_city",
+                "town",
+                "district",
+              ]);
+              const extractedState = extractMetaField(fieldData, [
+                "state",
+                "current_state",
+                "your_state",
+                "select_state",
+                "which_state",
+                "region",
+                "home_state",
+              ]);
+              const extractedNeet = extractMetaField(fieldData, [
+                "neet_status",
+                "neet",
+                "neet_score",
+                "neet_qualified",
+                "neet_result",
+                "have_you_appeared_for_neet",
+              ]);
+              const extractedCountry = extractMetaField(fieldData, [
+                "preferred_country",
+                "country",
+                "destination",
+                "target_country",
+                "study_destination",
+                "which_country",
               ]);
               const extractedPlatform = extractMetaField(fieldData, [
                 "platform",
@@ -166,6 +311,10 @@ export async function POST(request: NextRequest) {
               if (extractedPhone) leadPhone = extractedPhone;
               if (extractedEmail) leadEmail = extractedEmail;
               if (extractedCity) leadCity = extractedCity;
+              if (extractedState) leadState = extractedState;
+              if (extractedNeet) leadNeetStatus = extractedNeet;
+              if (extractedCountry) leadPreferredCountry = extractedCountry;
+
               if (extractedPlatform) {
                 leadPlatform =
                   extractedPlatform.toLowerCase().includes("ig") ||
@@ -174,51 +323,20 @@ export async function POST(request: NextRequest) {
                     : "Facebook";
               }
 
-              // Collect any custom questions from the lead form (destinations, travel dates, budget, etc.)
+              // Collect any custom questions from the lead form
               for (const field of fieldData) {
-                const normName = field.name?.toLowerCase().replace(/[\s_-]+/g, "");
+                const normName = (field.name || "").toLowerCase().replace(/[\s_-]+/g, "");
                 const isStandardField = [
-                  "fullname",
-                  "name",
-                  "firstname",
-                  "customername",
-                  "yourname",
-                  "phonenumber",
-                  "whatsappnumber",
-                  "phone",
-                  "mobilenumber",
-                  "contactnumber",
-                  "mobile",
-                  "email",
-                  "emailaddress",
-                  "platform",
-                  "source",
-                  "city",
-                  "location",
-                  "currentcity",
-                  "inboxurl",
-                  "inboxlink",
-                  "inbox",
-                  "fbinbox",
-                  "threadurl",
-                  "threadlink",
+                  "fullname", "name", "firstname", "customername", "yourname", "studentname",
+                  "phonenumber", "whatsappnumber", "phone", "mobilenumber", "contactnumber", "mobile",
+                  "email", "emailaddress", "platform", "source", "city", "location", "currentcity",
+                  "state", "currentstate", "inboxurl", "inboxlink", "threadurl",
                 ].includes(normName);
 
-                if (normName.includes("inbox") || normName.includes("thread")) {
-                  continue;
-                }
+                if (normName.includes("inbox") || normName.includes("thread")) continue;
 
                 if (!isStandardField && Array.isArray(field.values) && field.values.length > 0) {
                   const valStr = field.values.join(", ");
-                  const valLower = valStr.toLowerCase();
-                  if (
-                    valLower.includes("business.facebook.com") ||
-                    valLower.includes("facebook.com/latest") ||
-                    valLower.includes("nav_ref=thread_view")
-                  ) {
-                    continue;
-                  }
-
                   const cleanName = field.name.replace(/_/g, " ").replace(/[?:]+$/, "").trim();
                   const qFormatted = cleanName ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1) : cleanName;
                   const cleanVal = valStr.replace(/_/g, " ").trim();
@@ -227,7 +345,7 @@ export async function POST(request: NextRequest) {
               }
             } else {
               apiError = leadData?.error?.message || `HTTP ${graphRes.status}`;
-              console.error(`[Meta Webhook] Meta Graph API returned error for leadgen ${leadgenId}:`, apiError);
+              console.error(`[Meta Webhook] Meta Graph API error for leadgen ${leadgenId}:`, apiError);
             }
           } catch (err: any) {
             apiError = err?.message || "Failed to query Meta Graph API";
@@ -238,6 +356,16 @@ export async function POST(request: NextRequest) {
           console.warn("[Meta Webhook] No page access token available to query lead details.");
         }
 
+        // Deduce state if not explicitly in form
+        if (!leadState) {
+          leadState = detectIndianState(`${campaignName} ${adsetName} ${adName} ${leadCity} ${extraFormFields.join(" ")}`);
+        }
+
+        // Deduce preferred country if not explicitly in form
+        if (!leadPreferredCountry) {
+          leadPreferredCountry = detectCountry(`${campaignName} ${adsetName} ${adName} ${extraFormFields.join(" ")}`);
+        }
+
         // Clean phone number
         const rawPhone = leadPhone;
         const digits = rawPhone.replace(/\D/g, "");
@@ -246,129 +374,52 @@ export async function POST(request: NextRequest) {
         else if (digits.length === 11 && digits.startsWith("0")) cleanPhone = digits.slice(1);
         else if (digits.length > 10) cleanPhone = digits.slice(-10);
 
-        // Check for duplicate lead in active CRM
+        // Check for duplicate lead in CRM
         if (cleanPhone && cleanPhone.length >= 7) {
           const existing = await LeadModel.findOne({
             deletedAt: null,
             phone: { $regex: cleanPhone },
           });
           if (existing) {
-            console.log(`Duplicate lead skipped: ${leadName} (${cleanPhone})`);
-            results.push({ status: "skipped_duplicate", leadgenId });
+            console.log(`[Meta Webhook] Duplicate lead skipped: ${leadName} (${cleanPhone})`);
+            results.push({ status: "skipped_duplicate", leadgenId, phone: cleanPhone });
             continue;
           }
         }
 
-        // ── Executive Campaign Assignment ────────────────────────────────────
-        // Rule: Kolkata Campaign / City / Form -> Mouparna Banerjee
-        // Rule: Delhi NCR Campaign / City / Form -> Sheeba Birla
-        // Fallback: Round-Robin across registered active executives
-        const routingHaystack = [
-          campaignName,
-          adsetName,
-          adName,
-          leadCity,
-          formId,
-          ...extraFormFields,
-        ].join(" ").toLowerCase();
+        // ── Round-Robin Counselor / User Assignment ──────────────────────────
+        // 1. If currently only 1 user exists (Komal Jha), she gets 100% of leads.
+        // 2. When new users are created, leads rotate automatically across active users.
+        const assignedUser = await getNextRoundRobinUser();
+        const assignedOwnerId = assignedUser?.id || "admin";
+        const assignedOwnerName = assignedUser?.name || "Admin";
 
-        const isKolkata =
-          routingHaystack.includes("kolkata") ||
-          routingHaystack.includes("calcutta") ||
-          routingHaystack.includes("west bengal") ||
-          routingHaystack.includes(" wb ") ||
-          String(formId).includes("9031550");
+        // Format lead form notes
+        const formNotesLines: string[] = [];
+        if (leadState) formNotesLines.push(`• State: ${leadState}`);
+        if (leadCity) formNotesLines.push(`• City: ${leadCity}`);
+        if (leadNeetStatus) formNotesLines.push(`• NEET Status: ${leadNeetStatus}`);
+        if (leadPreferredCountry) formNotesLines.push(`• Preferred Country: ${leadPreferredCountry}`);
+        if (extraFormFields.length > 0) formNotesLines.push(...extraFormFields.map((f) => `• ${f}`));
 
-        const isDelhi =
-          routingHaystack.includes("delhi") ||
-          routingHaystack.includes("ncr") ||
-          routingHaystack.includes("gurgaon") ||
-          routingHaystack.includes("gurugram") ||
-          routingHaystack.includes("noida") ||
-          routingHaystack.includes("faridabad") ||
-          routingHaystack.includes("ghaziabad") ||
-          String(formId).includes("1058624");
+        const formAnswers = formNotesLines.join("\n");
+        const leadServices = leadPreferredCountry ? [leadPreferredCountry] : ["Others"];
 
-        let assignedOwnerId = "admin";
-        let assignedOwnerName = "Admin";
-        let routingReason = "Default Admin";
-
-        if (isKolkata) {
-          if (!leadCity) leadCity = "Kolkata";
-          const assignedUser = await getNextBranchUserRoundRobin("kolkata");
-          if (assignedUser) {
-            assignedOwnerId = assignedUser.id;
-            assignedOwnerName = assignedUser.name;
-            routingReason = `Kolkata Branch Round-Robin → ${assignedOwnerName}`;
-          }
-        } else if (isDelhi) {
-          if (!leadCity) leadCity = "Delhi NCR";
-          const assignedUser = await getNextBranchUserRoundRobin("delhi");
-          if (assignedUser) {
-            assignedOwnerId = assignedUser.id;
-            assignedOwnerName = assignedUser.name;
-            routingReason = `Delhi NCR Branch Round-Robin → ${assignedOwnerName}`;
-          }
-        } else {
-          const assignedUser = await getNextBranchUserRoundRobin("all");
-          if (assignedUser) {
-            assignedOwnerId = assignedUser.id;
-            assignedOwnerName = assignedUser.name;
-            routingReason = `Round-Robin (${assignedOwnerName})`;
-          }
-        }
-
-        // Determine service category from adset (or campaign/ad/form)
-        // Options: "Domestic Tours", "International Tours", "Flights/Hotels", "Others"
-        const lowerAdset = (adsetName || "").toLowerCase();
-        const lowerCampaign = (campaignName || "").toLowerCase();
-        const lowerAd = (adName || "").toLowerCase();
-        const lowerForm = extraFormFields.join(" ").toLowerCase();
-
-        let determinedService = "Domestic Tours"; // Default tour category
-        if (lowerAdset.includes("international")) {
-          determinedService = "International Tours";
-        } else if (lowerAdset.includes("domestic")) {
-          determinedService = "Domestic Tours";
-        } else if (
-          lowerCampaign.includes("international") ||
-          lowerAd.includes("international") ||
-          lowerForm.includes("international")
-        ) {
-          determinedService = "International Tours";
-        } else if (
-          lowerCampaign.includes("domestic") ||
-          lowerAd.includes("domestic") ||
-          lowerForm.includes("domestic")
-        ) {
-          determinedService = "Domestic Tours";
-        } else if (
-          lowerAdset.includes("flight") ||
-          lowerAdset.includes("hotel") ||
-          lowerCampaign.includes("flight") ||
-          lowerCampaign.includes("hotel")
-        ) {
-          determinedService = "Flights/Hotels";
-        }
-
-        const leadServices: string[] = [determinedService];
-
-        // Keep ONLY customer form answers (no campaign, adset, ad, assigned, or form ID metadata)
-        const formAnswers = extraFormFields.length > 0
-          ? extraFormFields.map((f) => `• ${f}`).join("\n")
-          : "";
-
-        // Create lead in CRM Initial Stage for the assigned user
+        // Create lead in CRM Initial Stage
         const created = await createLead({
           ownerId: assignedOwnerId,
+          assignAgent: assignedOwnerName,
           name: leadName,
           phone: cleanPhone || rawPhone || "—",
           email: leadEmail,
           city: leadCity || undefined,
-          channel: leadPlatform === "Instagram" ? "Instagram" : "Facebook",
+          state: leadState || undefined,
+          neetStatus: leadNeetStatus || undefined,
+          preferredCountry: leadPreferredCountry || undefined,
+          channel: "Meta Ads",
           stage: "Initial Contact",
           value: 0,
-          notes: "",
+          notes: `Campaign: ${campaignName || "State-wise"}${adsetName ? ` · AdSet: ${adsetName}` : ""}${adName ? ` · Ad: ${adName}` : ""}`,
           formNotes: formAnswers,
           services: leadServices,
           serviceType: leadServices[0],
@@ -378,6 +429,7 @@ export async function POST(request: NextRequest) {
           status: "created",
           leadId: created.id,
           leadgenId,
+          campaign: campaignName,
           assignedTo: { id: assignedOwnerId, name: assignedOwnerName },
         });
       }
@@ -385,7 +437,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, processed: results }, { status: 200 });
   } catch (error: any) {
-    console.error("Meta Webhook Error:", error);
+    console.error("[Meta Webhook Error]:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

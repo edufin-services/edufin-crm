@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import GoogleSheetsModal from "./GoogleSheetsModal";
+import MetaAdsModal from "./MetaAdsModal";
 
 interface IntegrationItem {
+  id?: string;
   name: string;
   type: string;
   status: string;
@@ -21,9 +23,28 @@ export default function IntegrationsClient({
   googleSheetsToken?: string;
 }) {
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+  const [isMetaAdsModalOpen, setIsMetaAdsModalOpen] = useState(false);
 
   const integrations: IntegrationItem[] = [
     {
+      id: "meta-ads",
+      name: "Meta Lead Ads (Instagram / Facebook)",
+      type: "Real-time Lead Ingestion",
+      status: "Active",
+      endpoint: "/api/webhooks/meta-ads",
+      desc: "Instant lead capture from State-wise ad campaigns with automated counselor Round-Robin distribution",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-700">
+          <path d="m3 11 18-5v12L3 13v-2z" />
+          <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+        </svg>
+      ),
+      badge: "bg-purple-50 text-purple-700 border-purple-200",
+      isActionable: true,
+      actionLabel: "Configure & Round-Robin",
+    },
+    {
+      id: "google-sheets",
       name: "Google Sheets Real-Time Sync",
       type: "Instant 0s Auto-Ingest",
       status: "Active",
@@ -43,11 +64,12 @@ export default function IntegrationsClient({
       actionLabel: "Setup & Apps Script Code",
     },
     {
+      id: "justdial",
       name: "Justdial Lead API & Push Webhook",
       type: "Real-time Lead Ingestion",
       status: "Active",
       endpoint: "/api/webhooks/justdial",
-      desc: "Automatic lead capture for Money Transfer, Forex & International Tours",
+      desc: "Automatic lead capture for Admissions, Consultation & Inquiries",
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-700">
           <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
@@ -56,6 +78,7 @@ export default function IntegrationsClient({
       badge: "bg-amber-50 text-amber-700 border-amber-200",
     },
     {
+      id: "whatsapp",
       name: "WhatsApp Business API",
       type: "Webhook Sync",
       status: "Active",
@@ -69,20 +92,7 @@ export default function IntegrationsClient({
       badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
     },
     {
-      name: "Meta Lead Ads (Instagram / Facebook)",
-      type: "Lead Ingestion",
-      status: "Active",
-      endpoint: "/api/webhooks/meta-ads",
-      desc: "Instant lead ingestion from sponsored ads campaigns",
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-700">
-          <path d="m3 11 18-5v12L3 13v-2z" />
-          <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
-        </svg>
-      ),
-      badge: "bg-purple-50 text-purple-700 border-purple-200",
-    },
-    {
+      id: "smtp",
       name: "SMTP Mail Server & Email Gateway",
       type: "Email Relay",
       status: "Connected",
@@ -122,7 +132,9 @@ export default function IntegrationsClient({
             key={item.name}
             className={`rounded-2xl border bg-white p-5 shadow-2xs space-y-3 transition ${
               item.isActionable
-                ? "border-emerald-200 hover:border-emerald-400 hover:shadow-md ring-1 ring-emerald-500/10"
+                ? item.id === "meta-ads"
+                  ? "border-purple-200 hover:border-purple-400 hover:shadow-md ring-1 ring-purple-500/10"
+                  : "border-emerald-200 hover:border-emerald-400 hover:shadow-md ring-1 ring-emerald-500/10"
                 : "border-zinc-200/90"
             }`}
           >
@@ -148,11 +160,21 @@ export default function IntegrationsClient({
               <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-50 px-2 py-1 rounded border border-zinc-200">
                 {item.endpoint}
               </span>
-              
+
               {item.isActionable ? (
                 <button
-                  onClick={() => setIsGoogleSheetsModalOpen(true)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  onClick={() => {
+                    if (item.id === "meta-ads") {
+                      setIsMetaAdsModalOpen(true);
+                    } else {
+                      setIsGoogleSheetsModalOpen(true);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition cursor-pointer ${
+                    item.id === "meta-ads"
+                      ? "text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200"
+                      : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+                  }`}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -172,6 +194,12 @@ export default function IntegrationsClient({
         isOpen={isGoogleSheetsModalOpen}
         onClose={() => setIsGoogleSheetsModalOpen(false)}
         defaultToken={googleSheetsToken}
+      />
+
+      {/* Meta Lead Ads Modal */}
+      <MetaAdsModal
+        isOpen={isMetaAdsModalOpen}
+        onClose={() => setIsMetaAdsModalOpen(false)}
       />
     </div>
   );

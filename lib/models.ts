@@ -295,6 +295,9 @@ const AdminSettingsSchema = new Schema({
   companyTimezone: { type: String, default: "Asia/Kolkata (IST)" },
   passwordHash: String,
   metaRoundRobinIndex: { type: Number, default: 0 },
+  globalRoundRobinIndex: { type: Number, default: 0 },
+  metaPageAccessToken: { type: String, default: "" },
+  metaVerifyToken: { type: String, default: "" },
   kolkataRoundRobinIndex: { type: Number, default: 0 },
   delhiRoundRobinIndex: { type: Number, default: 0 },
 });
