@@ -958,7 +958,7 @@ export default function AdminLeadsClient({
                   }
                 }}
                 onDrop={() => handleDrop(stage)}
-                className={`flex w-[280px] min-w-[280px] shrink-0 flex-col rounded-2xl bg-[#f8fafc] p-2.5 transition-all duration-200 border border-zinc-200/80 h-full ${
+                className={`flex w-[290px] min-w-[290px] shrink-0 flex-col rounded-2xl bg-[#f8fafc] p-2.5 transition-all duration-200 border border-zinc-200/80 h-fit shadow-2xs ${
                   isDragTarget ? "bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-200 scale-[1.01]" : ""
                 }`}
               >
@@ -971,7 +971,7 @@ export default function AdminLeadsClient({
                   <div className={`mt-2 h-1 w-full rounded-full ${meta.lineColor || "bg-sky-400"}`} />
                 </div>
 
-                {/* Cards stack */}
+                {/* Cards stack: natural flow without inner column scrollbars */}
                 <div className="flex flex-col gap-2.5">
                   {stageLeads.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-6 px-3 text-center rounded-xl border border-dashed border-zinc-200/90 bg-white/40">
@@ -1161,17 +1161,14 @@ export default function AdminLeadsClient({
                   )}
                 </div>
 
-                {/* Add Lead button matching Forex CRM */}
+                {/* Add Lead button pinned at column bottom */}
                 <button
                   onClick={() => setModalStage(stage)}
-                  className="mt-2.5 flex-none flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-300 bg-white/70 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-white hover:border-zinc-400 shadow-2xs transition-all cursor-pointer"
+                  className="mt-2 shrink-0 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-300 bg-white/70 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-white hover:border-zinc-400 shadow-2xs transition-all cursor-pointer"
                 >
                   <span className="text-sm font-bold leading-none">+</span>
                   <span>Add Lead</span>
                 </button>
-
-                {/* Stretched drop target area: fills remaining height to bottom of column */}
-                <div className="flex-1 min-h-[60px]" />
               </div>
             );
           })}

@@ -28,7 +28,7 @@ export default function ConfirmModal({
   variant = "danger",
   isLoading = false,
 }: ConfirmModalProps) {
-  useBodyScrollLock();
+  useBodyScrollLock(isOpen);
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {

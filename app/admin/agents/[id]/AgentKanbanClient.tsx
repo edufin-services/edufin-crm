@@ -689,7 +689,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
 
       {/* ── KANBAN VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === "kanban" ? (
-        <div className="flex gap-3 overflow-x-auto pb-6 flex-1 items-start w-full pr-2">
+        <div className="flex gap-3 overflow-x-auto pb-6 min-h-[calc(100vh-210px)] items-start w-full pr-2">
           {STAGES.map((stage) => {
             const stageLeads = filteredLeads.filter((l) => normalizeStage(l.stage) === stage);
             const meta = stageMeta[stage] ?? stageMeta["Initial Contact"];
@@ -703,12 +703,12 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                 onDragOver={(e) => { e.preventDefault(); setDragOverStage(stage); }}
                 onDragLeave={() => setDragOverStage(null)}
                 onDrop={() => handleDrop(stage)}
-                className={`flex w-[280px] min-w-[280px] shrink-0 flex-col rounded-2xl border bg-[#f8fafc] p-2.5 transition-all ${
-                  isDragTarget ? "bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200" : "border-zinc-200/80"
+                className={`flex w-[290px] min-w-[290px] shrink-0 flex-col rounded-2xl bg-[#f8fafc] p-2.5 transition-all duration-200 border border-zinc-200/80 h-fit shadow-2xs ${
+                  isDragTarget ? "bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200" : ""
                 }`}
               >
                 {/* Column header matching screenshot */}
-                <div className="mb-2.5 px-1 pt-1 pb-1 flex flex-col items-center text-center">
+                <div className="mb-2 px-1 pt-1 pb-1 flex flex-col items-center text-center shrink-0">
                   <h2 className="text-[12px] font-black uppercase tracking-wider text-zinc-900">{stageLabel}</h2>
                   <p className="mt-0.5 text-[11px] font-semibold text-zinc-500">
                     {stageLeads.length} leads • ₹{stageTotalValue.toLocaleString("en-IN")}
@@ -716,8 +716,8 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                   <div className={`mt-2 h-1 w-full rounded-full ${meta.lineColor || "bg-sky-400"}`} />
                 </div>
 
-                {/* Cards stack */}
-                <div className="flex flex-col gap-3 min-h-[220px]">
+                {/* Cards stack: natural flow without inner column scrollbars */}
+                <div className="flex flex-col gap-2.5">
                   {stageLeads.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center rounded-2xl border border-dashed border-zinc-300/80 bg-white/60">
                       <div className={`mb-2 h-7 w-7 rounded-full ${meta.dot} opacity-20`} />
