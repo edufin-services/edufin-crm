@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CHANNELS, COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, DEFAULT_USER_PASSWORD, type Channel, type Stage } from "@/lib/constants";
@@ -225,6 +225,41 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
       localStorage.setItem("agent_leads_view_mode", mode);
     } catch {}
   }
+
+  // ── Sideways scrolling (3 stages at a time) ──────────────────────────────
+  const kanbanBoardRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const checkScroll = useCallback(() => {
+    const el = kanbanBoardRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 10);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 10);
+  }, []);
+
+  useEffect(() => {
+    const el = kanbanBoardRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll);
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [viewMode, leads, checkScroll]);
+
+  const scrollBoard = (direction: "left" | "right") => {
+    const el = kanbanBoardRef.current;
+    if (!el) return;
+    // Each column is 290px + 12px gap = 302px. 3 stages = 906px
+    const distance = 302 * 3;
+    el.scrollBy({
+      left: direction === "left" ? -distance : distance,
+      behavior: "smooth",
+    });
+  };
   const [modalStage, setModalStage] = useState<Stage | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [viewingNoteLead, setViewingNoteLead] = useState<Lead | null>(null);
@@ -555,6 +590,32 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
           </div>
+
+          {/* Sideways scroll buttons (3 stages at a time) */}
+          {viewMode === "kanban" && (
+            <div className="flex items-center rounded-xl border border-zinc-200 bg-zinc-100 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => scrollBoard("left")}
+                disabled={!canScrollLeft}
+                className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                title="Scroll left 3 stages"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                <span className="hidden sm:inline">3 Stages</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollBoard("right")}
+                disabled={!canScrollRight}
+                className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                title="Scroll right 3 stages"
+              >
+                <span className="hidden sm:inline">3 Stages</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -689,7 +750,44 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
 
       {/* ── KANBAN VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === "kanban" ? (
-        <div className="flex gap-3 overflow-x-auto pb-6 min-h-[calc(100vh-210px)] items-start w-full pr-2">
+        <div className="relative w-full">
+          {/* Floating Sideways Navigation Buttons (3 stages at a time) */}
+          <div className="sticky top-28 z-20 pointer-events-none flex justify-between w-full h-0">
+            <button
+              type="button"
+              onClick={() => scrollBoard("left")}
+              disabled={!canScrollLeft}
+              className={`pointer-events-auto -mt-3.5 -ml-1 sm:-ml-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-zinc-700 shadow-xl border border-zinc-200/90 ring-1 ring-black/5 backdrop-blur-md transition-all duration-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 hover:scale-110 active:scale-95 disabled:opacity-0 disabled:pointer-events-none cursor-pointer ${
+                canScrollLeft ? "opacity-95" : "opacity-0 pointer-events-none"
+              }`}
+              title="Scroll left 3 stages"
+              aria-label="Scroll left 3 stages"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => scrollBoard("right")}
+              disabled={!canScrollRight}
+              className={`pointer-events-auto -mt-3.5 -mr-1 sm:-mr-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-zinc-700 shadow-xl border border-zinc-200/90 ring-1 ring-black/5 backdrop-blur-md transition-all duration-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 hover:scale-110 active:scale-95 disabled:opacity-0 disabled:pointer-events-none cursor-pointer ${
+                canScrollRight ? "opacity-95" : "opacity-0 pointer-events-none"
+              }`}
+              title="Scroll right 3 stages"
+              aria-label="Scroll right 3 stages"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+
+          <div
+            ref={kanbanBoardRef}
+            className="flex gap-3 overflow-x-auto pb-6 min-h-[calc(100vh-210px)] items-start w-full pr-2 scroll-smooth"
+          >
           {STAGES.map((stage) => {
             const stageLeads = filteredLeads.filter((l) => normalizeStage(l.stage) === stage);
             const meta = stageMeta[stage] ?? stageMeta["Initial Contact"];
@@ -861,6 +959,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
             );
           })}
         </div>
+      </div>
       ) : (
         /* ── TABLE / LIST VIEW ─────────────────────────────────────────────── */
         <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden shadow-xs">
