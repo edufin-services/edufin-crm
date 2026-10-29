@@ -17,7 +17,7 @@ export default function MetaAdsModal({
   useBodyScrollLock(isOpen);
 
   const [origin, setOrigin] = useState("");
-  const [activeTab, setActiveTab] = useState<"setup" | "distribution" | "simulator">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "guide" | "distribution" | "simulator">("setup");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
 
@@ -31,6 +31,12 @@ export default function MetaAdsModal({
   const [distributionMode, setDistributionMode] = useState("");
   const [savingToken, setSavingToken] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Live Meta Diagnostic & Page Subscription State
+  const [tokenInspection, setTokenInspection] = useState<any>(null);
+  const [subscribingPage, setSubscribingPage] = useState(false);
+  const [subscribeFeedback, setSubscribeFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
 
   // Test Simulator State
   const [simName, setSimName] = useState("Aman Sharma");
@@ -67,6 +73,7 @@ export default function MetaAdsModal({
         if (data.verifyToken) setVerifyToken(data.verifyToken);
         setCounselors(data.counselors || []);
         setDistributionMode(data.distributionMode || "");
+        setTokenInspection(data.tokenInspection || null);
       }
     } catch (err) {
       console.error("Failed to load Meta Ads config:", err);
@@ -80,6 +87,7 @@ export default function MetaAdsModal({
     try {
       setSavingToken(true);
       setSaveSuccess(false);
+      setSaveError("");
       const res = await fetch("/api/admin/integrations/meta-ads", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -88,16 +96,44 @@ export default function MetaAdsModal({
           metaVerifyToken: verifyToken.trim(),
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         setSaveSuccess(true);
         setPageAccessToken("");
+        if (data.tokenInspection) {
+          setTokenInspection(data.tokenInspection);
+        }
         await fetchConfig();
-        setTimeout(() => setSaveSuccess(false), 4000);
+        setTimeout(() => setSaveSuccess(false), 5000);
+      } else {
+        setSaveError(data.error || "Failed to save token");
       }
-    } catch (err) {
-      console.error("Save error:", err);
+    } catch (err: any) {
+      setSaveError(err.message || "Failed to save token");
     } finally {
       setSavingToken(false);
+    }
+  }
+
+  async function handleSubscribePage() {
+    try {
+      setSubscribingPage(true);
+      setSubscribeFeedback(null);
+      const res = await fetch("/api/admin/integrations/meta-ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSubscribeFeedback({ success: true, message: data.message });
+        await fetchConfig();
+      } else {
+        setSubscribeFeedback({ success: false, message: data.error || "Failed to subscribe Page." });
+      }
+    } catch (err: any) {
+      setSubscribeFeedback({ success: false, message: err.message || "Network error" });
+    } finally {
+      setSubscribingPage(false);
     }
   }
 
@@ -132,7 +168,7 @@ export default function MetaAdsModal({
 
   if (!isOpen) return null;
 
-  const webhookUrl = `${origin || "https://your-crm-domain.com"}/api/webhooks/meta-ads`;
+  const webhookUrl = `${origin || "https://fxpertisetravel.vercel.app"}/api/webhooks/meta-ads`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-xs">
@@ -171,10 +207,10 @@ export default function MetaAdsModal({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-200 bg-white px-5 gap-6">
+        <div className="flex border-b border-zinc-200 bg-white px-5 gap-5 overflow-x-auto">
           <button
             onClick={() => setActiveTab("setup")}
-            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
               activeTab === "setup"
                 ? "border-purple-600 text-purple-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -184,12 +220,36 @@ export default function MetaAdsModal({
               <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
               <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
             </svg>
-            Meta Webhook Setup
+            Webhook &amp; Token
+            {tokenInspection?.valid ? (
+              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+            ) : tokenInspection?.error ? (
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+            ) : null}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("guide")}
+            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "guide"
+                ? "border-purple-600 text-purple-700"
+                : "border-transparent text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            Permanent Token Guide
+            <span className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.2 rounded-full font-bold">
+              Never Expires
+            </span>
           </button>
 
           <button
             onClick={() => setActiveTab("distribution")}
-            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
               activeTab === "distribution"
                 ? "border-purple-600 text-purple-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -202,14 +262,14 @@ export default function MetaAdsModal({
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
             Round-Robin Routing
-            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1">
+            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
               Active
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab("simulator")}
-            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
               activeTab === "simulator"
                 ? "border-purple-600 text-purple-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -226,6 +286,78 @@ export default function MetaAdsModal({
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {activeTab === "setup" && (
             <div className="space-y-5">
+              {/* Token Live Diagnostic Status Banner */}
+              {loadingConfig ? (
+                <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-500 flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full border-2 border-purple-600 border-t-transparent animate-spin"></span>
+                  Checking Meta Graph API token status...
+                </div>
+              ) : tokenInspection?.valid ? (
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-4 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-emerald-900">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                      Connected to Facebook Page: {tokenInspection.pageName || "Active"}
+                    </div>
+                    <span className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-bold">
+                      Page ID: {tokenInspection.pageId}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-emerald-100">
+                    <div className="flex items-center gap-1.5 text-emerald-800 font-medium">
+                      {tokenInspection.isPageSubscribed ? (
+                        <>
+                          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Page is subscribed to <strong>leadgen</strong> webhooks. Real-time leads will flow in automatically!</span>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1 text-amber-900">
+                          <span className="text-amber-600 font-bold">⚠️ Warning:</span>
+                          <span>Page is not yet subscribed to webhook events. Click to subscribe:</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!tokenInspection.isPageSubscribed && (
+                      <button
+                        onClick={handleSubscribePage}
+                        disabled={subscribingPage}
+                        className="text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer shrink-0"
+                      >
+                        {subscribingPage ? "Subscribing..." : "Subscribe Page Now"}
+                      </button>
+                    )}
+                  </div>
+
+                  {subscribeFeedback && (
+                    <div className={`p-2 rounded-lg text-[11px] font-bold ${subscribeFeedback.success ? "bg-emerald-100 text-emerald-900" : "bg-red-100 text-red-900"}`}>
+                      {subscribeFeedback.message}
+                    </div>
+                  )}
+                </div>
+              ) : tokenInspection?.error ? (
+                <div className="bg-red-50/90 border border-red-200 rounded-xl p-4 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-red-900">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                      Meta Page Access Token is Expired or Invalid!
+                    </div>
+                    <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                      Action Required
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-white/80 rounded-lg border border-red-100 font-mono text-[11px] text-red-800 break-words">
+                    {tokenInspection.error}
+                  </div>
+                  <p className="text-red-700 font-medium text-[11px] leading-relaxed">
+                    Meta blocks lead retrieval whenever a token expires. Leads cannot sync automatically until you enter a new token below. To ensure it never expires again, see the <strong>Permanent Token Guide</strong> tab.
+                  </p>
+                </div>
+              ) : null}
+
               {/* Webhook Credentials Box */}
               <div className="bg-purple-50/60 border border-purple-200/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -275,66 +407,187 @@ export default function MetaAdsModal({
                       3. Meta Page Access Token
                     </h3>
                     <p className="text-[11px] text-zinc-500">
-                      Required by Meta Graph API to read lead information (student name, phone, state, NEET score, and custom form answers)
+                      Required by Meta Graph API to fetch lead details (student name, phone, city, state, NEET score, and custom answers)
                     </p>
                   </div>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      hasPageAccessToken
+                      tokenInspection?.valid
                         ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : tokenInspection?.error
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : hasPageAccessToken
+                        ? "bg-zinc-100 text-zinc-700 border-zinc-300"
                         : "bg-amber-50 text-amber-700 border-amber-200"
                     }`}
                   >
-                    {hasPageAccessToken ? "✓ Token Connected" : "Token Not Set"}
+                    {tokenInspection?.valid
+                      ? "✓ Token Active"
+                      : tokenInspection?.error
+                      ? "✗ Expired / Invalid"
+                      : hasPageAccessToken
+                      ? "Configured"
+                      : "Token Not Set"}
                   </span>
                 </div>
 
                 {hasPageAccessToken && (
                   <div className="flex items-center gap-2 text-xs text-zinc-600 bg-zinc-50 p-2.5 rounded-lg border border-zinc-200">
-                    <span className="font-semibold">Active Token:</span>
+                    <span className="font-semibold">Current Stored Token:</span>
                     <span className="font-mono text-zinc-800">{pageAccessTokenMasked}</span>
                   </div>
                 )}
 
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-zinc-700">
-                    {hasPageAccessToken ? "Update Page Access Token" : "Enter Meta Page Access Token"}
+                    Paste New / Permanent Meta Page Access Token:
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="password"
                       value={pageAccessToken}
                       onChange={(e) => setPageAccessToken(e.target.value)}
-                      placeholder="EAAP..."
+                      placeholder="EAAPrFuOIr4o..."
                       className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                     />
                     <button
                       onClick={handleSaveToken}
                       disabled={savingToken || !pageAccessToken.trim()}
-                      className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                      className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0"
                     >
-                      {savingToken ? "Saving..." : "Save Token"}
+                      {savingToken ? "Validating & Saving..." : "Save & Verify"}
                     </button>
                   </div>
                 </div>
 
                 {saveSuccess && (
                   <div className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg">
-                    ✓ Page Access Token updated successfully!
+                    ✓ Page Access Token updated and verified successfully!
+                  </div>
+                )}
+
+                {saveError && (
+                  <div className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 p-2 rounded-lg">
+                    ✗ {saveError}
                   </div>
                 )}
               </div>
 
-              {/* Instructions */}
+              {/* Instructions Box */}
               <div className="border border-zinc-200 rounded-xl p-4 bg-zinc-50 space-y-2.5 text-xs text-zinc-600">
                 <h4 className="font-bold text-zinc-900">How to configure in Meta for Developers:</h4>
                 <ol className="list-decimal list-inside space-y-1.5 leading-relaxed">
                   <li>Go to <strong>developers.facebook.com</strong> &gt; your App &gt; <strong>Webhooks</strong>.</li>
                   <li>Select <strong>Page</strong> from the dropdown, click <strong>Subscribe to this object</strong>.</li>
                   <li>Paste the <strong>Callback URL</strong> and <strong>Verify Token</strong> from above, then click <strong>Verify and save</strong>.</li>
-                  <li>Under Page Subscription fields, subscribe to the <strong>leadgen</strong> event.</li>
-                  <li>All leads from your active <strong>State-wise</strong> campaign will now sync into the CRM in real time!</li>
+                  <li>Under Page Subscription fields, click <strong>Subscribe</strong> on the <strong>leadgen</strong> event.</li>
+                  <li>Ensure your Facebook Page is subscribed using the <strong>Subscribe Page Now</strong> button above.</li>
+                  <li>All leads from your active <strong>State-wise</strong> campaign will now sync directly into the CRM in real time!</li>
                 </ol>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "guide" && (
+            <div className="space-y-4">
+              <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-4 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-bold text-purple-900 text-sm">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  Why did the previous token stop working?
+                </div>
+                <p className="text-purple-800 leading-relaxed font-medium">
+                  Standard tokens generated from Meta&apos;s Graph API Explorer are <strong>short-lived user session tokens</strong> that expire after a few hours or days. When the token expires, Meta blocks incoming lead retrieval.
+                </p>
+                <p className="text-purple-800 leading-relaxed font-medium">
+                  To keep your CRM syncing leads 24/7 without ever expiring, Meta requires a <strong>Permanent System User Token</strong>. Follow the 5 simple steps below:
+                </p>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* Step 1 */}
+                <div className="p-3.5 bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-1">
+                  <div className="font-bold text-zinc-900 flex items-center gap-2">
+                    <span className="h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] flex items-center justify-center font-bold">1</span>
+                    Open Meta Business Settings
+                  </div>
+                  <p className="text-zinc-600 pl-7 leading-relaxed">
+                    Go to{" "}
+                    <a
+                      href="https://business.facebook.com/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-600 underline font-semibold hover:text-purple-800"
+                    >
+                      business.facebook.com/settings
+                    </a>{" "}
+                    and select your Business Account.
+                  </p>
+                </div>
+
+                {/* Step 2 */}
+                <div className="p-3.5 bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-1">
+                  <div className="font-bold text-zinc-900 flex items-center gap-2">
+                    <span className="h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] flex items-center justify-center font-bold">2</span>
+                    Create a System User
+                  </div>
+                  <p className="text-zinc-600 pl-7 leading-relaxed">
+                    In the left navigation bar, click <strong>Users &gt; System Users</strong>. Click <strong>Add</strong>.
+                    Set the System User Name to <strong>&ldquo;CRM Lead Sync&rdquo;</strong> and select <strong>Admin</strong> role. Click <strong>Create System User</strong>.
+                  </p>
+                </div>
+
+                {/* Step 3 */}
+                <div className="p-3.5 bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-1">
+                  <div className="font-bold text-zinc-900 flex items-center gap-2">
+                    <span className="h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] flex items-center justify-center font-bold">3</span>
+                    Assign Page &amp; App Permissions
+                  </div>
+                  <p className="text-zinc-600 pl-7 leading-relaxed">
+                    Click <strong>Add Assets</strong>:
+                    <br />
+                    • Under <strong>Pages</strong>: Select the Facebook Page running your lead ads &rarr; Toggle on <strong>Full Control (Manage Page)</strong>.
+                    <br />
+                    • Under <strong>Apps</strong>: Select your Developer App &rarr; Toggle on <strong>Full Control (Manage App)</strong>.
+                    <br />
+                    Click <strong>Save Changes</strong>.
+                  </p>
+                </div>
+
+                {/* Step 4 */}
+                <div className="p-3.5 bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-2">
+                  <div className="font-bold text-zinc-900 flex items-center gap-2">
+                    <span className="h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] flex items-center justify-center font-bold">4</span>
+                    Generate Never-Expiring Token
+                  </div>
+                  <p className="text-zinc-600 pl-7 leading-relaxed">
+                    Click <strong>Generate New Token</strong>. Select your CRM App.
+                    <br />
+                    • Under <strong>Token Expiration</strong>, select: <strong>Never</strong>.
+                    <br />
+                    • Under <strong>Available Permissions</strong>, select:
+                  </p>
+                  <div className="pl-7 grid grid-cols-2 gap-2 text-[11px] font-mono font-bold text-purple-900">
+                    <div className="bg-purple-50 p-1.5 rounded border border-purple-200">✓ leads_retrieval</div>
+                    <div className="bg-purple-50 p-1.5 rounded border border-purple-200">✓ pages_show_list</div>
+                    <div className="bg-purple-50 p-1.5 rounded border border-purple-200">✓ pages_read_engagement</div>
+                    <div className="bg-purple-50 p-1.5 rounded border border-purple-200">✓ pages_manage_metadata</div>
+                  </div>
+                </div>
+
+                {/* Step 5 */}
+                <div className="p-3.5 bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-1">
+                  <div className="font-bold text-zinc-900 flex items-center gap-2">
+                    <span className="h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] flex items-center justify-center font-bold">5</span>
+                    Paste Token into CRM
+                  </div>
+                  <p className="text-zinc-600 pl-7 leading-relaxed">
+                    Click <strong>Generate Token</strong>, copy the generated token string, switch to the <strong>Webhook &amp; Token</strong> tab above, paste it, and click <strong>Save &amp; Verify</strong>.
+                  </p>
+                </div>
               </div>
             </div>
           )}

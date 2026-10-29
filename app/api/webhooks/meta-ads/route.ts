@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
   const adminSettings = await AdminSettingsModel.findOne({ id: "admin_settings" }).lean();
 
   const expectedToken =
-    process.env.META_VERIFY_TOKEN ||
     (adminSettings as any)?.metaVerifyToken ||
+    process.env.META_VERIFY_TOKEN ||
     "fx_meta_leads_token_2026";
 
   if (mode === "subscribe" && token === expectedToken) {
@@ -47,10 +47,19 @@ export async function GET(request: NextRequest) {
 function extractMetaField(fieldData: Array<{ name: string; values: string[] }>, keys: string[]): string {
   if (!Array.isArray(fieldData)) return "";
   for (const field of fieldData) {
-    const normName = (field.name || "").toLowerCase().replace(/[\s_-]+/g, "");
+    const rawName = (field.name || "").toLowerCase();
+    const normName = rawName.replace(/[^a-z0-9]/g, "");
     for (const key of keys) {
-      if (normName === key.toLowerCase().replace(/[\s_-]+/g, "") && field.values?.[0]) {
-        return String(field.values[0]).trim();
+      const rawKey = key.toLowerCase();
+      const normKey = rawKey.replace(/[^a-z0-9]/g, "");
+      if (
+        normName === normKey ||
+        normName.includes(normKey) ||
+        (normKey.length >= 4 && normName.includes(normKey))
+      ) {
+        if (field.values?.[0]) {
+          return String(field.values[0]).trim();
+        }
       }
     }
   }
@@ -62,13 +71,12 @@ function detectIndianState(text: string): string {
   const lower = text.toLowerCase();
   for (const st of INDIAN_STATES) {
     const stLower = st.toLowerCase();
-    // Match word boundaries
     const regex = new RegExp(`\\b${stLower.replace(/\s+/g, "\\s+")}\\b`, "i");
     if (regex.test(lower)) {
       return st;
     }
   }
-  // Short matches
+  // Common short matches
   if (/\bup\b/i.test(lower) && !lower.includes("support")) return "Uttar Pradesh";
   if (/\bmp\b/i.test(lower)) return "Madhya Pradesh";
   if (/\bwb\b/i.test(lower)) return "West Bengal";
@@ -97,9 +105,9 @@ export async function POST(request: NextRequest) {
     const adminSettings = await AdminSettingsModel.findOne({ id: "admin_settings" }).lean();
 
     const pageAccessToken =
+      (adminSettings as any)?.metaPageAccessToken ||
       process.env.META_PAGE_ACCESS_TOKEN ||
       process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
-      (adminSettings as any)?.metaPageAccessToken ||
       "";
 
     // ── Case A: Direct Test Lead / Simulator Payload ───────────────────────
@@ -111,16 +119,17 @@ export async function POST(request: NextRequest) {
       else if (digits.length === 11 && digits.startsWith("0")) cleanPhone = digits.slice(1);
       else if (digits.length > 10) cleanPhone = digits.slice(-10);
 
-      // Check duplicate
+      // Check duplicate using flexible formatting regex
       if (cleanPhone && cleanPhone.length >= 7) {
+        const phonePattern = cleanPhone.split("").join("\\D*");
         const existing = await LeadModel.findOne({
           deletedAt: null,
-          phone: { $regex: cleanPhone },
+          phone: { $regex: phonePattern },
         });
         if (existing) {
           return NextResponse.json({
             status: "skipped_duplicate",
-            message: `Lead with phone ${cleanPhone} already exists.`,
+            message: `Lead with phone ${cleanPhone} already exists in CRM.`,
             leadId: existing.id,
           });
         }
@@ -169,7 +178,8 @@ export async function POST(request: NextRequest) {
     }
 
     const entries = Array.isArray(body.entry) ? body.entry : [];
-    const results = [];
+    const results: any[] = [];
+    let totalLeadgenEvents = 0;
 
     for (const entry of entries) {
       const changes = Array.isArray(entry.changes) ? entry.changes : [];
@@ -182,178 +192,193 @@ export async function POST(request: NextRequest) {
         const pageId = change.value?.page_id || entry.id;
 
         if (!leadgenId) continue;
-
-        let leadName = "Meta Lead";
-        let leadPhone = "";
-        let leadEmail = "";
-        let leadCity = "";
-        let leadState = "";
-        let leadNeetStatus = "";
-        let leadPreferredCountry = "";
-        let leadPlatform = "Facebook";
-        let apiError = "";
-        const extraFormFields: string[] = [];
-
-        let campaignName = "State-wise"; // Default to State-wise campaign
-        let adsetName = "";
-        let adName = "";
+        totalLeadgenEvents++;
 
         // 1. Fetch details from Meta Graph API using pageAccessToken
-        if (pageAccessToken) {
-          try {
-            const graphRes = await fetch(
-              `https://graph.facebook.com/v21.0/${leadgenId}?fields=id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data&access_token=${pageAccessToken}`
-            );
-            const leadData = await graphRes.json().catch(() => null);
+        if (!pageAccessToken) {
+          console.error("[Meta Webhook] Cannot retrieve lead details: META_PAGE_ACCESS_TOKEN is missing or not configured.");
+          results.push({
+            status: "failed",
+            leadgenId,
+            error: "No Meta Page Access Token configured on server",
+          });
+          continue;
+        }
 
-            if (graphRes.ok && leadData) {
-              if (leadData.campaign_name) campaignName = leadData.campaign_name;
-              adsetName = leadData.adset_name || "";
-              adName = leadData.ad_name || "";
+        let leadData: any = null;
+        let apiError = "";
 
-              // If campaign name is not populated directly on leadgen, fetch via campaign_id
-              if (!leadData.campaign_name && leadData.campaign_id) {
-                try {
-                  const campRes = await fetch(
-                    `https://graph.facebook.com/v21.0/${leadData.campaign_id}?fields=name&access_token=${pageAccessToken}`
-                  );
-                  const campData = await campRes.json().catch(() => null);
-                  if (campData?.name) campaignName = campData.name;
-                } catch {}
-              }
+        try {
+          const graphRes = await fetch(
+            `https://graph.facebook.com/v21.0/${leadgenId}?fields=id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data&access_token=${pageAccessToken}`,
+            { signal: AbortSignal.timeout(10000) }
+          );
+          leadData = await graphRes.json().catch(() => null);
 
-              // If adset name is not populated directly on leadgen, fetch via adset_id
-              if (!adsetName && leadData.adset_id) {
-                try {
-                  const adsetRes = await fetch(
-                    `https://graph.facebook.com/v21.0/${leadData.adset_id}?fields=name&access_token=${pageAccessToken}`
-                  );
-                  const adsetData = await adsetRes.json().catch(() => null);
-                  if (adsetData?.name) adsetName = adsetData.name;
-                } catch {}
-              }
-
-              // If ad name is not populated directly on leadgen, fetch via ad_id
-              if (!adName && leadData.ad_id) {
-                try {
-                  const adRes = await fetch(
-                    `https://graph.facebook.com/v21.0/${leadData.ad_id}?fields=name&access_token=${pageAccessToken}`
-                  );
-                  const adData = await adRes.json().catch(() => null);
-                  if (adData?.name) adName = adData.name;
-                } catch {}
-              }
-
-              const fieldData: Array<{ name: string; values: string[] }> = Array.isArray(leadData.field_data)
-                ? leadData.field_data
-                : [];
-
-              const extractedName = extractMetaField(fieldData, [
-                "full_name",
-                "name",
-                "first_name",
-                "customer_name",
-                "your_name",
-                "student_name",
-              ]);
-              const extractedPhone = extractMetaField(fieldData, [
-                "phone_number",
-                "whatsapp_number",
-                "phone",
-                "mobile_number",
-                "contact_number",
-                "mobile",
-                "student_phone",
-              ]);
-              const extractedEmail = extractMetaField(fieldData, [
-                "email",
-                "email_address",
-                "student_email",
-              ]);
-              const extractedCity = extractMetaField(fieldData, [
-                "city",
-                "location",
-                "current_city",
-                "town",
-                "district",
-              ]);
-              const extractedState = extractMetaField(fieldData, [
-                "state",
-                "current_state",
-                "your_state",
-                "select_state",
-                "which_state",
-                "region",
-                "home_state",
-              ]);
-              const extractedNeet = extractMetaField(fieldData, [
-                "neet_status",
-                "neet",
-                "neet_score",
-                "neet_qualified",
-                "neet_result",
-                "have_you_appeared_for_neet",
-              ]);
-              const extractedCountry = extractMetaField(fieldData, [
-                "preferred_country",
-                "country",
-                "destination",
-                "target_country",
-                "study_destination",
-                "which_country",
-              ]);
-              const extractedPlatform = extractMetaField(fieldData, [
-                "platform",
-                "source",
-              ]);
-
-              if (extractedName) leadName = extractedName;
-              if (extractedPhone) leadPhone = extractedPhone;
-              if (extractedEmail) leadEmail = extractedEmail;
-              if (extractedCity) leadCity = extractedCity;
-              if (extractedState) leadState = extractedState;
-              if (extractedNeet) leadNeetStatus = extractedNeet;
-              if (extractedCountry) leadPreferredCountry = extractedCountry;
-
-              if (extractedPlatform) {
-                leadPlatform =
-                  extractedPlatform.toLowerCase().includes("ig") ||
-                  extractedPlatform.toLowerCase().includes("instagram")
-                    ? "Instagram"
-                    : "Facebook";
-              }
-
-              // Collect any custom questions from the lead form
-              for (const field of fieldData) {
-                const normName = (field.name || "").toLowerCase().replace(/[\s_-]+/g, "");
-                const isStandardField = [
-                  "fullname", "name", "firstname", "customername", "yourname", "studentname",
-                  "phonenumber", "whatsappnumber", "phone", "mobilenumber", "contactnumber", "mobile",
-                  "email", "emailaddress", "platform", "source", "city", "location", "currentcity",
-                  "state", "currentstate", "inboxurl", "inboxlink", "threadurl",
-                ].includes(normName);
-
-                if (normName.includes("inbox") || normName.includes("thread")) continue;
-
-                if (!isStandardField && Array.isArray(field.values) && field.values.length > 0) {
-                  const valStr = field.values.join(", ");
-                  const cleanName = field.name.replace(/_/g, " ").replace(/[?:]+$/, "").trim();
-                  const qFormatted = cleanName ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1) : cleanName;
-                  const cleanVal = valStr.replace(/_/g, " ").trim();
-                  extraFormFields.push(`${qFormatted}?: ${cleanVal}`);
-                }
-              }
-            } else {
-              apiError = leadData?.error?.message || `HTTP ${graphRes.status}`;
-              console.error(`[Meta Webhook] Meta Graph API error for leadgen ${leadgenId}:`, apiError);
-            }
-          } catch (err: any) {
-            apiError = err?.message || "Failed to query Meta Graph API";
-            console.error("[Meta Webhook] Network exception querying Meta Graph API:", err);
+          if (!graphRes.ok || !leadData || leadData.error) {
+            apiError = leadData?.error?.message || `HTTP ${graphRes.status}`;
+            console.error(`[Meta Webhook] Meta Graph API error for leadgen ${leadgenId}:`, apiError);
+            results.push({
+              status: "failed",
+              leadgenId,
+              error: apiError,
+              errorCode: leadData?.error?.code,
+              errorSubcode: leadData?.error?.error_subcode,
+            });
+            continue;
           }
-        } else {
-          apiError = "META_PAGE_ACCESS_TOKEN is missing on server";
-          console.warn("[Meta Webhook] No page access token available to query lead details.");
+        } catch (err: any) {
+          apiError = err?.message || "Failed to query Meta Graph API";
+          console.error(`[Meta Webhook] Network exception querying Meta Graph API for leadgen ${leadgenId}:`, err);
+          results.push({
+            status: "failed",
+            leadgenId,
+            error: apiError,
+          });
+          continue;
+        }
+
+        let campaignName = leadData.campaign_name || "State-wise";
+        let adsetName = leadData.adset_name || "";
+        let adName = leadData.ad_name || "";
+
+        // If campaign name is not populated directly on leadgen, fetch via campaign_id
+        if (!leadData.campaign_name && leadData.campaign_id) {
+          try {
+            const campRes = await fetch(
+              `https://graph.facebook.com/v21.0/${leadData.campaign_id}?fields=name&access_token=${pageAccessToken}`,
+              { signal: AbortSignal.timeout(6000) }
+            );
+            const campData = await campRes.json().catch(() => null);
+            if (campData?.name) campaignName = campData.name;
+          } catch {}
+        }
+
+        // If adset name is not populated directly on leadgen, fetch via adset_id
+        if (!adsetName && leadData.adset_id) {
+          try {
+            const adsetRes = await fetch(
+              `https://graph.facebook.com/v21.0/${leadData.adset_id}?fields=name&access_token=${pageAccessToken}`,
+              { signal: AbortSignal.timeout(6000) }
+            );
+            const adsetData = await adsetRes.json().catch(() => null);
+            if (adsetData?.name) adsetName = adsetData.name;
+          } catch {}
+        }
+
+        // If ad name is not populated directly on leadgen, fetch via ad_id
+        if (!adName && leadData.ad_id) {
+          try {
+            const adRes = await fetch(
+              `https://graph.facebook.com/v21.0/${leadData.ad_id}?fields=name&access_token=${pageAccessToken}`,
+              { signal: AbortSignal.timeout(6000) }
+            );
+            const adData = await adRes.json().catch(() => null);
+            if (adData?.name) adName = adData.name;
+          } catch {}
+        }
+
+        const fieldData: Array<{ name: string; values: string[] }> = Array.isArray(leadData.field_data)
+          ? leadData.field_data
+          : [];
+
+        let leadName = extractMetaField(fieldData, [
+          "full_name",
+          "name",
+          "first_name",
+          "customer_name",
+          "your_name",
+          "student_name",
+        ]) || "Meta Lead";
+
+        const leadPhone = extractMetaField(fieldData, [
+          "phone_number",
+          "whatsapp_number",
+          "phone",
+          "mobile_number",
+          "contact_number",
+          "mobile",
+          "student_phone",
+        ]);
+
+        const leadEmail = extractMetaField(fieldData, [
+          "email",
+          "email_address",
+          "student_email",
+        ]);
+
+        const leadCity = extractMetaField(fieldData, [
+          "city",
+          "location",
+          "current_city",
+          "town",
+          "district",
+        ]);
+
+        let leadState = extractMetaField(fieldData, [
+          "state",
+          "current_state",
+          "your_state",
+          "select_state",
+          "which_state",
+          "region",
+          "home_state",
+        ]);
+
+        const leadNeetStatus = extractMetaField(fieldData, [
+          "neet_status",
+          "neet",
+          "neet_score",
+          "neet_qualified",
+          "neet_result",
+          "have_you_appeared_for_neet",
+          "have_you_qualified_neet",
+          "qualified_neet",
+        ]);
+
+        let leadPreferredCountry = extractMetaField(fieldData, [
+          "preferred_country",
+          "country",
+          "destination",
+          "target_country",
+          "study_destination",
+          "which_country",
+        ]);
+
+        const extractedPlatform = extractMetaField(fieldData, [
+          "platform",
+          "source",
+        ]);
+
+        const extraFormFields: string[] = [];
+
+        // Collect custom questions from the lead form (e.g. parent/student, annual budget)
+        for (const field of fieldData) {
+          const rawName = (field.name || "").toLowerCase();
+          const normName = rawName.replace(/[^a-z0-9]/g, "");
+
+          const isStandardField = [
+            "fullname", "name", "firstname", "customername", "yourname", "studentname",
+            "phonenumber", "whatsappnumber", "phone", "mobilenumber", "contactnumber", "mobile",
+            "email", "emailaddress", "platform", "source", "city", "location", "currentcity",
+            "state", "currentstate", "inboxurl", "inboxlink", "threadurl",
+          ].some((std) => normName === std || normName === `${std}id`);
+
+          if (normName.includes("inbox") || normName.includes("thread")) continue;
+
+          if (!isStandardField && Array.isArray(field.values) && field.values.length > 0) {
+            const valStr = field.values.join(", ").trim();
+            if (!valStr) continue;
+            const cleanName = field.name
+              .replace(/_/g, " ")
+              .replace(/\s+/g, " ")
+              .replace(/[?:]+$/, "")
+              .trim();
+            const qFormatted = cleanName
+              ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
+              : cleanName;
+            extraFormFields.push(`${qFormatted}?: ${valStr}`);
+          }
         }
 
         // Deduce state if not explicitly in form
@@ -374,22 +399,41 @@ export async function POST(request: NextRequest) {
         else if (digits.length === 11 && digits.startsWith("0")) cleanPhone = digits.slice(1);
         else if (digits.length > 10) cleanPhone = digits.slice(-10);
 
-        // Check for duplicate lead in CRM
+        if (!cleanPhone && !rawPhone) {
+          console.warn(`[Meta Webhook] Leadgen ${leadgenId} has no phone number. Skipping creation.`);
+          results.push({
+            status: "failed",
+            leadgenId,
+            error: "Lead has no phone number",
+          });
+          continue;
+        }
+
+        // Check for duplicate lead in CRM (flexible matching against stored formats)
         if (cleanPhone && cleanPhone.length >= 7) {
+          const phonePattern = cleanPhone.split("").join("\\D*");
+          const orConditions: any[] = [
+            { phone: { $regex: phonePattern } },
+          ];
+          if (leadEmail && leadEmail.includes("@")) {
+            orConditions.push({
+              email: { $regex: `^${leadEmail.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+            });
+          }
+
           const existing = await LeadModel.findOne({
             deletedAt: null,
-            phone: { $regex: cleanPhone },
+            $or: orConditions,
           });
+
           if (existing) {
             console.log(`[Meta Webhook] Duplicate lead skipped: ${leadName} (${cleanPhone})`);
-            results.push({ status: "skipped_duplicate", leadgenId, phone: cleanPhone });
+            results.push({ status: "skipped_duplicate", leadgenId, phone: cleanPhone, existingLeadId: existing.id });
             continue;
           }
         }
 
         // ── Round-Robin Counselor / User Assignment ──────────────────────────
-        // 1. If currently only 1 user exists (Komal Jha), she gets 100% of leads.
-        // 2. When new users are created, leads rotate automatically across active users.
         const assignedUser = await getNextRoundRobinUser();
         const assignedOwnerId = assignedUser?.id || "admin";
         const assignedOwnerName = assignedUser?.name || "Admin";
@@ -433,6 +477,19 @@ export async function POST(request: NextRequest) {
           assignedTo: { id: assignedOwnerId, name: assignedOwnerName },
         });
       }
+    }
+
+    const failedCount = results.filter((r) => r.status === "failed").length;
+    if (totalLeadgenEvents > 0 && failedCount === totalLeadgenEvents) {
+      // Return HTTP 500 so Meta will retry webhook delivery once token is restored
+      return NextResponse.json(
+        {
+          success: false,
+          error: "All Meta leadgen events failed to process (e.g. invalid or expired Page Access Token).",
+          processed: results,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true, processed: results }, { status: 200 });
