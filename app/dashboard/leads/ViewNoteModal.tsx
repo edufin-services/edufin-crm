@@ -39,7 +39,7 @@ export function extractFormAndUserNotes(
       const cleanLine = trimmed.replace(/^[•\s*-]+/, "").trim();
       const lowerClean = cleanLine.toLowerCase();
 
-      // Discard all campaign, ad, adset, assigned, form ID, leadgen ID metadata, and inbox url/links
+      // Discard all campaign, ad, adset, assigned, form ID, leadgen ID metadata, file references, and inbox url/links
       if (
         trimmed.startsWith("🎯") ||
         trimmed.startsWith("📌") ||
@@ -57,6 +57,14 @@ export function extractFormAndUserNotes(
         lowerClean.startsWith("meta lead ads") ||
         lowerClean.startsWith("sheet row:") ||
         lowerClean.startsWith("requested service:") ||
+        lowerClean.startsWith("file:") ||
+        lowerClean.startsWith("filename:") ||
+        lowerClean.startsWith("file name:") ||
+        lowerClean.startsWith("source file:") ||
+        lowerClean.startsWith("sheet:") ||
+        lowerClean.includes(".xls") ||
+        lowerClean.includes(".xlsx") ||
+        lowerClean.includes(".csv") ||
         lowerClean.startsWith("inbox url:") ||
         lowerClean.startsWith("inbox_url:") ||
         lowerClean.startsWith("inbox link:") ||
@@ -194,13 +202,18 @@ export default function ViewNoteModal({
         const qNorm = qRaw.toLowerCase().replace(/[\s_-]+/g, "");
         const aLower = aRaw.toLowerCase();
 
-        // Discard any inbox link/url or facebook thread links
+        // Discard any inbox link/url, facebook thread links, and file/sheet names
         if (
           qNorm.includes("inbox") ||
           qNorm.includes("thread") ||
+          qNorm.includes("file") ||
+          qNorm.includes("sheet") ||
           aLower.includes("business.facebook.com") ||
           aLower.includes("facebook.com/latest") ||
-          aLower.includes("nav_ref=thread_view")
+          aLower.includes("nav_ref=thread_view") ||
+          aLower.includes(".xls") ||
+          aLower.includes(".xlsx") ||
+          aLower.includes(".csv")
         ) {
           continue;
         }

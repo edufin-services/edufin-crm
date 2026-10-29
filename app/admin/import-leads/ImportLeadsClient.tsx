@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import ConfirmModal from "@/app/components/ConfirmModal";
 import type { Channel } from "@/lib/constants";
 import type { ImportedLead } from "@/lib/db";
+import { extractLeadFromRow, type ExtractedLeadRow } from "@/lib/lead-parser";
 
 type UserItem = {
   id: string;
@@ -71,11 +72,10 @@ export default function ImportLeadsClient({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadTargetUserId, setUploadTargetUserId] = useState<string>("");
-  const [parsedPreview, setParsedPreview] = useState<
-    Array<{ name: string; phone: string; rawPhone: string; platform: string; channel: Channel }>
-  >([]);
+  const [parsedPreview, setParsedPreview] = useState<ExtractedLeadRow[]>([]);
   const [previewFileName, setPreviewFileName] = useState("");
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [viewingAnswersLead, setViewingAnswersLead] = useState<ImportedLead | ExtractedLeadRow | null>(null);
 
   // Bulk and single assignment state
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
@@ -203,101 +203,12 @@ export default function ImportLeadsClient({
           return;
         }
 
-        const extracted: Array<{
-          name: string;
-          phone: string;
-          rawPhone: string;
-          platform: string;
-          channel: Channel;
-        }> = [];
-
+        const extracted: ExtractedLeadRow[] = [];
         for (const row of rows) {
-          let nameVal = "";
-          let phoneVal = "";
-          let platformVal = "";
-
-          for (const [key, val] of Object.entries(row)) {
-            const normalizedKey = key.trim().toLowerCase().replace(/[\s_-]+/g, "");
-            if (
-              normalizedKey === "fullname" ||
-              normalizedKey === "name" ||
-              normalizedKey === "clientname" ||
-              normalizedKey === "customername" ||
-              normalizedKey === "leadname" ||
-              normalizedKey === "contactname"
-            ) {
-              nameVal = String(val).trim();
-            } else if (
-              normalizedKey === "whatsappnumber" ||
-              normalizedKey === "whatsapp" ||
-              normalizedKey === "phone" ||
-              normalizedKey === "phonenumber" ||
-              normalizedKey === "mobile" ||
-              normalizedKey === "mobilenumber" ||
-              normalizedKey === "number" ||
-              normalizedKey === "contact" ||
-              normalizedKey === "contactno"
-            ) {
-              phoneVal = String(val).trim();
-            } else if (
-              normalizedKey === "platform" ||
-              normalizedKey === "source" ||
-              normalizedKey === "channel" ||
-              normalizedKey === "sourceplatform" ||
-              normalizedKey === "adplatform" ||
-              normalizedKey === "social"
-            ) {
-              platformVal = String(val).trim();
-            }
+          const leadItem = extractLeadFromRow(row, file.name);
+          if (leadItem) {
+            extracted.push(leadItem);
           }
-
-          // Fallback if column names don't match headers: positional fallback
-          if (!nameVal && !phoneVal && Object.keys(row).length > 0) {
-            const vals = Object.values(row).map((v) => String(v).trim());
-            if (vals.length >= 3) {
-              platformVal = vals[0];
-              nameVal = vals[1];
-              phoneVal = vals[2];
-            } else if (vals.length === 2) {
-              nameVal = vals[0];
-              phoneVal = vals[1];
-            }
-          }
-
-          if (!nameVal && !phoneVal) continue;
-
-          // Normalize Phone
-          const raw = phoneVal;
-          const digits = raw.replace(/\D/g, "");
-          let clean = digits;
-          if (digits.length === 12 && digits.startsWith("91")) clean = digits.slice(2);
-          else if (digits.length === 11 && digits.startsWith("0")) clean = digits.slice(1);
-          else if (digits.length > 10) clean = digits.slice(-10);
-
-          // Normalize Platform
-          let platform = platformVal.toLowerCase();
-          let channel: Channel = "Facebook";
-          if (platform === "fb" || platform.includes("facebook") || platform.includes("meta")) {
-            platform = "fb";
-            channel = "Facebook";
-          } else if (platform === "ig" || platform.includes("instagram") || platform.includes("insta")) {
-            platform = "ig";
-            channel = "Instagram";
-          } else if (platform.includes("wa") || platform.includes("whatsapp")) {
-            platform = "whatsapp";
-            channel = "WhatsApp";
-          } else if (platform.includes("ad") || platform.includes("google")) {
-            platform = "ads";
-            channel = "Ads";
-          }
-
-          extracted.push({
-            name: nameVal || "Unnamed Lead",
-            phone: clean || raw || "—",
-            rawPhone: raw,
-            platform: platform || "fb",
-            channel,
-          });
         }
 
         if (extracted.length === 0) {
@@ -925,19 +836,20 @@ export default function ImportLeadsClient({
                     className="rounded border-zinc-300 text-rose-600 focus:ring-rose-500 cursor-pointer h-4 w-4"
                   />
                 </th>
-                <th className="px-5 py-4 min-w-[220px]">Lead Name</th>
-                <th className="px-5 py-4 min-w-[200px]">Phone &amp; WhatsApp</th>
-                <th className="px-5 py-4 min-w-[120px]">Platform</th>
-                <th className="px-5 py-4 min-w-[220px]">Status</th>
-                <th className="px-5 py-4 min-w-[280px]">Assign to User</th>
-                <th className="px-5 py-4 min-w-[150px] text-right">Actions</th>
+                <th className="px-5 py-4 min-w-[200px]">Lead Name</th>
+                <th className="px-5 py-4 min-w-[170px]">Phone &amp; WhatsApp</th>
+                <th className="px-5 py-4 min-w-[110px]">Platform</th>
+                <th className="px-5 py-4 min-w-[240px]">Customer Form Answers</th>
+                <th className="px-5 py-4 min-w-[180px]">Status</th>
+                <th className="px-5 py-4 min-w-[240px]">Assign to User</th>
+                <th className="px-5 py-4 min-w-[140px] text-right">Actions</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-zinc-100 font-medium">
               {filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-zinc-400">
+                  <td colSpan={8} className="py-16 text-center text-zinc-400">
                     <p className="text-sm font-semibold text-zinc-700">No imported leads found</p>
                     <p className="text-xs text-zinc-400 mt-1">
                       Upload a .csv or .xls file to see records.
@@ -1020,6 +932,48 @@ export default function ImportLeadsClient({
                           <span className="inline-block rounded-md bg-zinc-100 text-zinc-700 border border-zinc-200 px-2.5 py-1 text-xs font-bold whitespace-nowrap">
                             {lead.platform || lead.channel || "Other"}
                           </span>
+                        )}
+                      </td>
+
+                      {/* Customer Form Answers */}
+                      <td className="px-5 py-4">
+                        {lead.formNotes ? (
+                          <div className="space-y-1.5 max-w-[260px]">
+                            <div className="flex flex-wrap gap-1">
+                              {lead.state && (
+                                <span className="inline-block rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-2 py-0.5 text-[10px] font-bold">
+                                  {lead.state}
+                                </span>
+                              )}
+                              {lead.city && (
+                                <span className="inline-block rounded-md bg-sky-50 text-sky-700 border border-sky-200/80 px-2 py-0.5 text-[10px] font-bold">
+                                  {lead.city}
+                                </span>
+                              )}
+                              {lead.neetStatus && (
+                                <span className="inline-block rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2 py-0.5 text-[10px] font-bold">
+                                  NEET: {lead.neetStatus}
+                                </span>
+                              )}
+                              {lead.preferredCountry && (
+                                <span className="inline-block rounded-md bg-purple-50 text-purple-700 border border-purple-200/80 px-2 py-0.5 text-[10px] font-bold">
+                                  {lead.preferredCountry}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setViewingAnswersLead(lead)}
+                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-lg px-2.5 py-1 transition cursor-pointer"
+                            >
+                              <span>📋 View Form Answers</span>
+                              <span className="text-[10px] bg-rose-200/70 text-rose-800 rounded-full px-1.5 py-0.2">
+                                {lead.formNotes.split("\n").filter((l) => l.trim().length > 0).length}
+                              </span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400 text-xs italic">No form answers</span>
                         )}
                       </td>
 
@@ -1163,6 +1117,7 @@ export default function ImportLeadsClient({
                       <th className="px-4 py-2.5">Platform</th>
                       <th className="px-4 py-2.5">Customer Name</th>
                       <th className="px-4 py-2.5">WhatsApp / Phone</th>
+                      <th className="px-4 py-2.5 min-w-[180px]">Customer Form Answers</th>
                       <th className="px-4 py-2.5">Duplicate Status</th>
                     </tr>
                   </thead>
@@ -1190,6 +1145,43 @@ export default function ImportLeadsClient({
                           {item.name}
                         </td>
                         <td className="px-4 py-2.5 font-mono text-zinc-700">{item.rawPhone || item.phone}</td>
+                        <td className="px-4 py-2.5 max-w-[260px]">
+                          {item.formNotes ? (
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap gap-1">
+                                {item.state && (
+                                  <span className="inline-block rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-1.5 py-0.5 text-[10px] font-bold">
+                                    {item.state}
+                                  </span>
+                                )}
+                                {item.city && (
+                                  <span className="inline-block rounded bg-sky-50 text-sky-700 border border-sky-200/80 px-1.5 py-0.5 text-[10px] font-bold">
+                                    {item.city}
+                                  </span>
+                                )}
+                                {item.neetStatus && (
+                                  <span className="inline-block rounded bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-1.5 py-0.5 text-[10px] font-bold">
+                                    NEET: {item.neetStatus}
+                                  </span>
+                                )}
+                                {item.preferredCountry && (
+                                  <span className="inline-block rounded bg-purple-50 text-purple-700 border border-purple-200/80 px-1.5 py-0.5 text-[10px] font-bold">
+                                    {item.preferredCountry}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setViewingAnswersLead(item)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                              >
+                                View {item.formNotes.split("\n").filter(Boolean).length} Answers
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-zinc-400 text-[11px] italic">No form answers</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5">
                           {item.isDuplicate ? (
                             <span className="inline-block rounded-md bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold">
@@ -1256,6 +1248,89 @@ export default function ImportLeadsClient({
                     : `Confirm & Import ${previewAnalysis.newCount} New Leads`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Form Answers Viewer Modal */}
+      {viewingAnswersLead && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          onClick={() => setViewingAnswersLead(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-zinc-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 bg-zinc-50">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
+                    📋
+                  </span>
+                  <h3 className="text-sm font-black text-zinc-900">
+                    Customer Form Answers
+                  </h3>
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Lead: <strong className="text-zinc-800">{viewingAnswersLead.name}</strong>
+                  {viewingAnswersLead.phone ? ` · ${viewingAnswersLead.phone}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingAnswersLead(null)}
+                className="text-xs font-bold text-zinc-400 hover:text-zinc-700 px-2 py-1 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-2.5">
+              {viewingAnswersLead.formNotes ? (
+                viewingAnswersLead.formNotes
+                  .split("\n")
+                  .map((l) => l.trim())
+                  .filter(Boolean)
+                  .map((line, idx) => {
+                    const clean = line.replace(/^[•\s*-]+/, "").trim();
+                    const colonIdx = clean.indexOf(":");
+                    if (colonIdx === -1) {
+                      return (
+                        <div key={idx} className="rounded-xl border border-zinc-100 bg-zinc-50/80 p-3 text-xs text-zinc-800 font-medium">
+                          • {clean}
+                        </div>
+                      );
+                    }
+                    const qRaw = clean.slice(0, colonIdx).trim();
+                    const aRaw = clean.slice(colonIdx + 1).trim();
+                    return (
+                      <div key={idx} className="rounded-xl border border-zinc-100 bg-zinc-50/80 p-3 space-y-0.5">
+                        <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                          {qRaw}
+                        </p>
+                        <p className="text-xs font-semibold text-zinc-900">
+                          {aRaw}
+                        </p>
+                      </div>
+                    );
+                  })
+              ) : (
+                <p className="text-xs text-zinc-400 italic text-center py-6">
+                  No customer form answers recorded for this lead.
+                </p>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-100 px-6 py-3 bg-zinc-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingAnswersLead(null)}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>

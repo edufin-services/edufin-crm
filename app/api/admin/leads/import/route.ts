@@ -8,123 +8,25 @@ import {
   getAllUsers,
   getImportedLeads,
 } from "@/lib/db";
+import {
+  cleanPhoneNumber,
+  extractLeadFromRow,
+  normalizePlatform,
+  type ExtractedLeadRow,
+} from "@/lib/lead-parser";
 import { getSession } from "@/lib/session";
 
-function normalizePlatform(val: unknown): { platform: string; channel: Channel } {
-  const str = String(val ?? "").trim().toLowerCase();
-  if (str === "fb" || str.includes("facebook") || str.includes("meta ads") || str === "meta") {
-    return { platform: "fb", channel: "Facebook" };
-  }
-  if (str === "ig" || str.includes("instagram") || str.includes("insta")) {
-    return { platform: "ig", channel: "Instagram" };
-  }
-  if (str === "wa" || str.includes("whatsapp")) {
-    return { platform: "whatsapp", channel: "WhatsApp" };
-  }
-  if (str.includes("ad") || str.includes("google")) {
-    return { platform: "ads", channel: "Ads" };
-  }
-  if (str.includes("email") || str.includes("mail")) {
-    return { platform: "email", channel: "Email" };
-  }
-  return { platform: str || "fb", channel: "Facebook" };
-}
-
-function cleanPhoneNumber(val: unknown): { clean: string; raw: string } {
-  const raw = String(val ?? "").trim();
-  const digits = raw.replace(/\D/g, "");
-  let clean = digits;
-  if (digits.length === 12 && digits.startsWith("91")) {
-    clean = digits.slice(2);
-  } else if (digits.length === 11 && digits.startsWith("0")) {
-    clean = digits.slice(1);
-  } else if (digits.length > 10) {
-    clean = digits.slice(-10);
-  }
-  return { clean, raw };
-}
-
-function extractRowsFromWorkbook(buffer: ArrayBuffer | Buffer, fileName: string = "") {
+function extractRowsFromWorkbook(buffer: ArrayBuffer | Buffer, fileName: string = ""): ExtractedLeadRow[] {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return [];
   const sheet = wb.Sheets[sheetName];
   const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-  const parsedLeads: Array<{
-    name: string;
-    phone: string;
-    rawPhone: string;
-    platform: string;
-    channel: Channel;
-    fileName: string;
-  }> = [];
-
+  const parsedLeads: ExtractedLeadRow[] = [];
   for (const row of rawRows) {
-    // Find matching keys regardless of case or spaces
-    let nameVal = "";
-    let phoneVal = "";
-    let platformVal = "";
-
-    for (const [key, val] of Object.entries(row)) {
-      const normalizedKey = key.trim().toLowerCase().replace(/[\s_-]+/g, "");
-      if (
-        normalizedKey === "fullname" ||
-        normalizedKey === "name" ||
-        normalizedKey === "clientname" ||
-        normalizedKey === "customername" ||
-        normalizedKey === "leadname" ||
-        normalizedKey === "contactname"
-      ) {
-        nameVal = String(val).trim();
-      } else if (
-        normalizedKey === "whatsappnumber" ||
-        normalizedKey === "whatsapp" ||
-        normalizedKey === "phone" ||
-        normalizedKey === "phonenumber" ||
-        normalizedKey === "mobile" ||
-        normalizedKey === "mobilenumber" ||
-        normalizedKey === "number" ||
-        normalizedKey === "contact" ||
-        normalizedKey === "contactno"
-      ) {
-        phoneVal = String(val).trim();
-      } else if (
-        normalizedKey === "platform" ||
-        normalizedKey === "source" ||
-        normalizedKey === "channel" ||
-        normalizedKey === "sourceplatform" ||
-        normalizedKey === "adplatform" ||
-        normalizedKey === "social"
-      ) {
-        platformVal = String(val).trim();
-      }
-    }
-
-    // Fallback: If column names were not matched, check 3-column rows by position
-    if (!nameVal && !phoneVal && Object.keys(row).length > 0) {
-      const values = Object.values(row).map((v) => String(v).trim());
-      if (values.length >= 3) {
-        // e.g. [platform, full_name, whatsapp_number] as shown in user screenshot
-        platformVal = values[0];
-        nameVal = values[1];
-        phoneVal = values[2];
-      }
-    }
-
-    if (!nameVal && !phoneVal) continue;
-
-    const { clean, raw } = cleanPhoneNumber(phoneVal);
-    const { platform, channel } = normalizePlatform(platformVal);
-
-    parsedLeads.push({
-      name: nameVal || "Unnamed Lead",
-      phone: clean || raw || "—",
-      rawPhone: raw,
-      platform,
-      channel,
-      fileName,
-    });
+    const lead = extractLeadFromRow(row, fileName);
+    if (lead) parsedLeads.push(lead);
   }
 
   return parsedLeads;
@@ -152,14 +54,7 @@ export async function POST(request: NextRequest) {
 
   const contentType = request.headers.get("content-type") || "";
 
-  let leadsToInsert: Array<{
-    name: string;
-    phone: string;
-    rawPhone?: string;
-    platform?: string;
-    channel?: Channel;
-    fileName?: string;
-  }> = [];
+  let leadsToInsert: ExtractedLeadRow[] = [];
 
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
@@ -178,18 +73,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (Array.isArray(body.leads)) {
-      leadsToInsert = body.leads.map((l: any) => {
-        const { clean, raw } = cleanPhoneNumber(l.phone || l.whatsapp_number || l.number || l.mobile);
-        const { platform, channel } = normalizePlatform(l.platform || l.channel || l.source);
-        return {
-          name: String(l.name || l.full_name || "Unnamed Lead").trim(),
-          phone: clean || raw || "—",
-          rawPhone: raw,
-          platform,
-          channel,
-          fileName: String(l.fileName || body.fileName || "manual_upload.xls"),
-        };
-      });
+      leadsToInsert = body.leads
+        .map((l: any) => {
+          // If the item already has parsed form answers / fields
+          if (l.formNotes !== undefined || l.email !== undefined || l.city !== undefined) {
+            const { clean, raw } = cleanPhoneNumber(l.phone || l.rawPhone || l.whatsapp_number || l.number || l.mobile);
+            const { platform, channel } = normalizePlatform(l.platform || l.channel || l.source);
+            return {
+              name: String(l.name || l.full_name || "Unnamed Lead").trim(),
+              phone: clean || raw || "—",
+              rawPhone: raw,
+              platform,
+              channel,
+              email: l.email || undefined,
+              city: l.city || undefined,
+              state: l.state || undefined,
+              neetStatus: l.neetStatus || undefined,
+              preferredCountry: l.preferredCountry || undefined,
+              formNotes: l.formNotes || undefined,
+              notes: l.notes || undefined,
+              fileName: String(l.fileName || body.fileName || "manual_upload.xls"),
+            };
+          }
+          // If raw row is passed
+          return extractLeadFromRow(l, body.fileName || "manual_upload.xls");
+        })
+        .filter(Boolean) as ExtractedLeadRow[];
     }
   }
 

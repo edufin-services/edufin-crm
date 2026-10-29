@@ -1429,6 +1429,14 @@ export default function LeadDrawer({
                           !lower.includes("leadgen id:") &&
                           !lower.startsWith("meta lead ads") &&
                           !lower.startsWith("📋 form answers:") &&
+                          !lower.startsWith("file:") &&
+                          !lower.startsWith("filename:") &&
+                          !lower.startsWith("file name:") &&
+                          !lower.startsWith("source file:") &&
+                          !lower.startsWith("sheet:") &&
+                          !lower.includes(".xls") &&
+                          !lower.includes(".xlsx") &&
+                          !lower.includes(".csv") &&
                           !lower.startsWith("inbox") &&
                           !lower.includes("inbox_url") &&
                           !lower.includes("business.facebook.com") &&

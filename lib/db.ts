@@ -212,6 +212,13 @@ export type ImportedLead = {
   name: string;
   phone: string;
   rawPhone?: string;
+  email?: string;
+  city?: string;
+  state?: string;
+  neetStatus?: string;
+  preferredCountry?: string;
+  formNotes?: string;
+  notes?: string;
   platform?: string;
   channel?: Channel;
   status: "pending" | "assigned" | "ignored";
@@ -1579,6 +1586,41 @@ export async function createImportedLeads(
 
     // Check if exists in DB by phone
     if (cleanPhone && existingPhoneSet.has(cleanPhone)) {
+      // If incoming lead has formNotes, backfill existing records if they were missing form answers
+      if (lead.formNotes) {
+        const updateFields: Record<string, any> = { formNotes: lead.formNotes };
+        if (lead.email) updateFields.email = lead.email;
+        if (lead.city) updateFields.city = lead.city;
+        if (lead.state) updateFields.state = lead.state;
+        if (lead.neetStatus) updateFields.neetStatus = lead.neetStatus;
+        if (lead.preferredCountry) updateFields.preferredCountry = lead.preferredCountry;
+        if (lead.notes) updateFields.notes = lead.notes;
+
+        // Update imported leads in queue if they had empty formNotes
+        await ImportedLeadModel.updateMany(
+          {
+            phone: { $regex: cleanPhone },
+            $or: [{ formNotes: "" }, { formNotes: null }, { formNotes: { $exists: false } }],
+          },
+          { $set: updateFields }
+        );
+
+        // Update active CRM leads if formNotes was empty
+        await LeadModel.updateMany(
+          {
+            phone: { $regex: cleanPhone },
+            deletedAt: null,
+            $or: [{ formNotes: "" }, { formNotes: null }, { formNotes: { $exists: false } }],
+          },
+          {
+            $set: {
+              ...updateFields,
+              ...(lead.preferredCountry ? { services: [lead.preferredCountry], serviceType: lead.preferredCountry } : {}),
+            },
+          }
+        );
+      }
+
       duplicates.push(`${lead.name} (${lead.rawPhone || lead.phone || "No phone"})`);
       continue;
     }
@@ -1625,15 +1667,24 @@ export async function assignImportedLead(
   const now = new Date().toISOString();
 
   // Create lead in CRM with initial stage
+  const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
   const createdLead = await createLead({
     ownerId: userId,
+    assignAgent: userName,
     name: imp.name,
     phone: imp.phone,
+    email: imp.email || undefined,
+    city: imp.city || undefined,
+    state: imp.state || undefined,
+    neetStatus: imp.neetStatus || undefined,
+    preferredCountry: imp.preferredCountry || undefined,
     channel: (imp.channel as Channel) || "Facebook",
     stage: "Initial Contact",
     value: 0,
-    notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
-    services: [],
+    notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+    formNotes: imp.formNotes || undefined,
+    services: leadServices,
+    serviceType: imp.preferredCountry || undefined,
   });
 
   // Update ImportedLead record
@@ -1669,15 +1720,24 @@ export async function bulkAssignImportedLeads(
 
   for (const doc of docs) {
     const imp = toPlain<ImportedLead>(doc);
+    const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
     const createdLead = await createLead({
       ownerId: userId,
+      assignAgent: userName,
       name: imp.name,
       phone: imp.phone,
+      email: imp.email || undefined,
+      city: imp.city || undefined,
+      state: imp.state || undefined,
+      neetStatus: imp.neetStatus || undefined,
+      preferredCountry: imp.preferredCountry || undefined,
       channel: (imp.channel as Channel) || "Facebook",
       stage: "Initial Contact",
       value: 0,
-      notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
-      services: [],
+      notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+      formNotes: imp.formNotes || undefined,
+      services: leadServices,
+      serviceType: imp.preferredCountry || undefined,
     });
     leads.push(createdLead);
 
@@ -1713,15 +1773,24 @@ export async function distributeImportedLeads(
     const user = users[i % users.length];
     const imp = toPlain<ImportedLead>(doc);
 
+    const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
     const createdLead = await createLead({
       ownerId: user.id,
+      assignAgent: user.name,
       name: imp.name,
       phone: imp.phone,
+      email: imp.email || undefined,
+      city: imp.city || undefined,
+      state: imp.state || undefined,
+      neetStatus: imp.neetStatus || undefined,
+      preferredCountry: imp.preferredCountry || undefined,
       channel: (imp.channel as Channel) || "Facebook",
       stage: "Initial Contact",
       value: 0,
-      notes: `Imported via Admin XLS Upload · Platform: ${imp.platform || "N/A"}${imp.fileName ? ` · File: ${imp.fileName}` : ""}`,
-      services: [],
+      notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+      formNotes: imp.formNotes || undefined,
+      services: leadServices,
+      serviceType: imp.preferredCountry || undefined,
     });
     leads.push(createdLead);
 
