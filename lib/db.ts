@@ -1539,55 +1539,137 @@ export async function getImportedLeads(filter?: { status?: string }): Promise<Im
   return docs.map((d) => toPlain<ImportedLead>(d));
 }
 
+export async function getExistingLeadContacts(): Promise<{ phones: string[]; emails: string[] }> {
+  await dbConnect();
+  const [crmLeads, importedLeads] = await Promise.all([
+    LeadModel.find({ deletedAt: null }).select("phone whatsappId email").lean(),
+    ImportedLeadModel.find({}).select("phone email rawPhone").lean(),
+  ]);
+
+  const phoneSet = new Set<string>();
+  const emailSet = new Set<string>();
+
+  for (const l of crmLeads) {
+    if (l.phone) {
+      const p = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) phoneSet.add(p);
+    }
+    if ((l as any).whatsappId) {
+      const p = String((l as any).whatsappId).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) phoneSet.add(p);
+    }
+    if (l.email && typeof l.email === "string" && l.email.includes("@")) {
+      emailSet.add(l.email.trim().toLowerCase());
+    }
+  }
+
+  for (const l of importedLeads) {
+    if (l.phone) {
+      const p = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) phoneSet.add(p);
+    }
+    if ((l as any).rawPhone) {
+      const p = String((l as any).rawPhone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) phoneSet.add(p);
+    }
+    if (l.email && typeof l.email === "string" && l.email.includes("@")) {
+      emailSet.add(l.email.trim().toLowerCase());
+    }
+  }
+
+  return {
+    phones: Array.from(phoneSet),
+    emails: Array.from(emailSet),
+  };
+}
+
 export async function createImportedLeads(
   leads: Array<Omit<ImportedLead, "id" | "uploadedAt" | "status">>
 ): Promise<{ created: ImportedLead[]; skippedCount: number; duplicates: string[] }> {
   await dbConnect();
   const now = new Date().toISOString();
 
-  // 1. Gather all phone numbers and names to check against database
-  const phonesToCheck = leads
-    .map((l) => String(l.phone || "").replace(/\D/g, "").slice(-10))
-    .filter((p) => p.length >= 7);
-
-  // 2. Fetch existing phones from active CRM leads
-  const existingCrmLeads = await LeadModel.find({
-    deletedAt: null,
-    phone: { $exists: true, $ne: "" },
-  }).select("phone name");
-
-  // 3. Fetch existing phones from Imported leads
-  const existingImported = await ImportedLeadModel.find({
-    phone: { $exists: true, $ne: "" },
-  }).select("phone name");
+  // 1. Fetch ALL existing phones and emails from active CRM leads and Imported leads
+  const [existingCrmLeads, existingImported] = await Promise.all([
+    LeadModel.find({ deletedAt: null }).select("phone whatsappId email name").lean(),
+    ImportedLeadModel.find({}).select("phone email rawPhone name").lean(),
+  ]);
 
   const existingPhoneSet = new Set<string>();
+  const existingEmailSet = new Set<string>();
+
   for (const l of existingCrmLeads) {
     if (l.phone) {
-      const clean = String(l.phone).replace(/\D/g, "").slice(-10);
-      if (clean) existingPhoneSet.add(clean);
+      const p = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) existingPhoneSet.add(p);
     }
-  }
-  for (const l of existingImported) {
-    if (l.phone) {
-      const clean = String(l.phone).replace(/\D/g, "").slice(-10);
-      if (clean) existingPhoneSet.add(clean);
+    if ((l as any).whatsappId) {
+      const p = String((l as any).whatsappId).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) existingPhoneSet.add(p);
+    }
+    if (l.email && typeof l.email === "string" && l.email.includes("@")) {
+      existingEmailSet.add(l.email.trim().toLowerCase());
     }
   }
 
-  // 4. Deduplicate within the incoming batch and against DB
-  const seenInBatch = new Set<string>();
+  for (const l of existingImported) {
+    if (l.phone) {
+      const p = String(l.phone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) existingPhoneSet.add(p);
+    }
+    if ((l as any).rawPhone) {
+      const p = String((l as any).rawPhone).replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) existingPhoneSet.add(p);
+    }
+    if (l.email && typeof l.email === "string" && l.email.includes("@")) {
+      existingEmailSet.add(l.email.trim().toLowerCase());
+    }
+  }
+
+  // 2. Deduplicate within the incoming batch and against DB
+  const seenInBatchPhones = new Set<string>();
+  const seenInBatchEmails = new Set<string>();
+  const seenInBatchKeys = new Set<string>();
+
   const docsToInsert: any[] = [];
   const duplicates: string[] = [];
 
   for (const lead of leads) {
     const cleanPhone = String(lead.phone || "").replace(/\D/g, "").slice(-10);
-    const key = cleanPhone || String(lead.name || "").toLowerCase().trim();
+    const cleanEmail = lead.email && typeof lead.email === "string" && lead.email.includes("@")
+      ? lead.email.trim().toLowerCase()
+      : "";
+    const cleanName = String(lead.name || "").toLowerCase().trim();
+    const fallbackKey = cleanPhone || cleanEmail || cleanName;
 
-    // Check if exists in DB by phone
-    if (cleanPhone && existingPhoneSet.has(cleanPhone)) {
+    let isDuplicate = false;
+    let duplicateReason = "";
+
+    // 1. Phone match against DB
+    if (cleanPhone && cleanPhone.length >= 7 && existingPhoneSet.has(cleanPhone)) {
+      isDuplicate = true;
+      duplicateReason = `Phone ${cleanPhone} already in CRM / Queue`;
+    }
+    // 2. Email match against DB
+    else if (cleanEmail && existingEmailSet.has(cleanEmail)) {
+      isDuplicate = true;
+      duplicateReason = `Email ${cleanEmail} already in CRM / Queue`;
+    }
+    // 3. Duplicate within the same incoming batch
+    else if (cleanPhone && cleanPhone.length >= 7 && seenInBatchPhones.has(cleanPhone)) {
+      isDuplicate = true;
+      duplicateReason = `Duplicate phone ${cleanPhone} in this file`;
+    } else if (cleanEmail && seenInBatchEmails.has(cleanEmail)) {
+      isDuplicate = true;
+      duplicateReason = `Duplicate email ${cleanEmail} in this file`;
+    } else if (fallbackKey && seenInBatchKeys.has(fallbackKey)) {
+      isDuplicate = true;
+      duplicateReason = `Duplicate entry "${lead.name}" in this file`;
+    }
+
+    if (isDuplicate) {
       // If incoming lead has formNotes, backfill existing records if they were missing form answers
-      if (lead.formNotes) {
+      if (cleanPhone && cleanPhone.length >= 7 && lead.formNotes) {
         const updateFields: Record<string, any> = { formNotes: lead.formNotes };
         if (lead.email) updateFields.email = lead.email;
         if (lead.city) updateFields.city = lead.city;
@@ -1621,18 +1703,22 @@ export async function createImportedLeads(
         );
       }
 
-      duplicates.push(`${lead.name} (${lead.rawPhone || lead.phone || "No phone"})`);
+      duplicates.push(`${lead.name} (${duplicateReason})`);
       continue;
     }
 
-    // Check if duplicate within the same batch
-    if (seenInBatch.has(key)) {
-      duplicates.push(`${lead.name} (${lead.rawPhone || lead.phone || "Duplicate in file"})`);
-      continue;
+    // New lead: track in batch sets and existing sets
+    if (cleanPhone && cleanPhone.length >= 7) {
+      seenInBatchPhones.add(cleanPhone);
+      existingPhoneSet.add(cleanPhone);
     }
-
-    seenInBatch.add(key);
-    if (cleanPhone) existingPhoneSet.add(cleanPhone);
+    if (cleanEmail) {
+      seenInBatchEmails.add(cleanEmail);
+      existingEmailSet.add(cleanEmail);
+    }
+    if (fallbackKey) {
+      seenInBatchKeys.add(fallbackKey);
+    }
 
     docsToInsert.push({
       ...lead,
@@ -1666,62 +1752,39 @@ export async function assignImportedLead(
   const imp = toPlain<ImportedLead>(doc);
   const now = new Date().toISOString();
 
-  // Create lead in CRM with initial stage
-  const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
-  const createdLead = await createLead({
-    ownerId: userId,
-    assignAgent: userName,
-    name: imp.name,
-    phone: imp.phone,
-    email: imp.email || undefined,
-    city: imp.city || undefined,
-    state: imp.state || undefined,
-    neetStatus: imp.neetStatus || undefined,
-    preferredCountry: imp.preferredCountry || undefined,
-    channel: (imp.channel as Channel) || "Facebook",
-    stage: "Initial Contact",
-    value: 0,
-    notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
-    formNotes: imp.formNotes || undefined,
-    services: leadServices,
-    serviceType: imp.preferredCountry || undefined,
-  });
-
-  // Update ImportedLead record
-  await ImportedLeadModel.updateOne(
-    { id },
-    {
-      $set: {
-        status: "assigned",
-        assignedToUserId: userId,
-        assignedToUserName: userName,
-        assignedLeadId: createdLead.id,
-        assignedAt: now,
-      },
+  // Check if lead already exists in CRM by phone to prevent duplicates
+  const cleanP = String(imp.phone || "").replace(/\D/g, "").slice(-10);
+  let targetLead: Lead | null = null;
+  if (cleanP && cleanP.length >= 7) {
+    const existing = await LeadModel.findOne({
+      phone: { $regex: cleanP },
+      deletedAt: null,
+    });
+    if (existing) {
+      targetLead = toPlain<Lead>(existing);
+      await LeadModel.updateOne(
+        { id: existing.id },
+        {
+          $set: {
+            ownerId: userId,
+            assignAgent: userName,
+            ...(imp.formNotes && !existing.formNotes ? { formNotes: imp.formNotes } : {}),
+            ...(imp.email && !existing.email ? { email: imp.email } : {}),
+            ...(imp.city && !existing.city ? { city: imp.city } : {}),
+            ...(imp.state && !existing.state ? { state: imp.state } : {}),
+            ...(imp.preferredCountry && (!existing.services || existing.services.length === 0)
+              ? { services: [imp.preferredCountry], serviceType: imp.preferredCountry }
+              : {}),
+          },
+        }
+      );
     }
-  );
+  }
 
-  const updatedImp = await ImportedLeadModel.findOne({ id });
-  return {
-    importedLead: toPlain<ImportedLead>(updatedImp!),
-    lead: createdLead,
-  };
-}
-
-export async function bulkAssignImportedLeads(
-  ids: string[],
-  userId: string,
-  userName: string
-): Promise<{ assignedCount: number; leads: Lead[] }> {
-  await dbConnect();
-  const docs = await ImportedLeadModel.find({ id: { $in: ids } });
-  const leads: Lead[] = [];
-  const now = new Date().toISOString();
-
-  for (const doc of docs) {
-    const imp = toPlain<ImportedLead>(doc);
+  // Create lead in CRM with initial stage if not already present
+  if (!targetLead) {
     const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
-    const createdLead = await createLead({
+    targetLead = await createLead({
       ownerId: userId,
       assignAgent: userName,
       name: imp.name,
@@ -1739,7 +1802,93 @@ export async function bulkAssignImportedLeads(
       services: leadServices,
       serviceType: imp.preferredCountry || undefined,
     });
-    leads.push(createdLead);
+  }
+
+  // Update ImportedLead record
+  await ImportedLeadModel.updateOne(
+    { id },
+    {
+      $set: {
+        status: "assigned",
+        assignedToUserId: userId,
+        assignedToUserName: userName,
+        assignedLeadId: targetLead.id,
+        assignedAt: now,
+      },
+    }
+  );
+
+  const updatedImp = await ImportedLeadModel.findOne({ id });
+  return {
+    importedLead: toPlain<ImportedLead>(updatedImp!),
+    lead: targetLead,
+  };
+}
+
+export async function bulkAssignImportedLeads(
+  ids: string[],
+  userId: string,
+  userName: string
+): Promise<{ assignedCount: number; leads: Lead[] }> {
+  await dbConnect();
+  const docs = await ImportedLeadModel.find({ id: { $in: ids } });
+  const leads: Lead[] = [];
+  const now = new Date().toISOString();
+
+  for (const doc of docs) {
+    const imp = toPlain<ImportedLead>(doc);
+    const cleanP = String(imp.phone || "").replace(/\D/g, "").slice(-10);
+    let targetLead: Lead | null = null;
+
+    if (cleanP && cleanP.length >= 7) {
+      const existing = await LeadModel.findOne({
+        phone: { $regex: cleanP },
+        deletedAt: null,
+      });
+      if (existing) {
+        targetLead = toPlain<Lead>(existing);
+        await LeadModel.updateOne(
+          { id: existing.id },
+          {
+            $set: {
+              ownerId: userId,
+              assignAgent: userName,
+              ...(imp.formNotes && !existing.formNotes ? { formNotes: imp.formNotes } : {}),
+              ...(imp.email && !existing.email ? { email: imp.email } : {}),
+              ...(imp.city && !existing.city ? { city: imp.city } : {}),
+              ...(imp.state && !existing.state ? { state: imp.state } : {}),
+              ...(imp.preferredCountry && (!existing.services || existing.services.length === 0)
+                ? { services: [imp.preferredCountry], serviceType: imp.preferredCountry }
+                : {}),
+            },
+          }
+        );
+      }
+    }
+
+    if (!targetLead) {
+      const leadServices = imp.preferredCountry ? [imp.preferredCountry] : [];
+      targetLead = await createLead({
+        ownerId: userId,
+        assignAgent: userName,
+        name: imp.name,
+        phone: imp.phone,
+        email: imp.email || undefined,
+        city: imp.city || undefined,
+        state: imp.state || undefined,
+        neetStatus: imp.neetStatus || undefined,
+        preferredCountry: imp.preferredCountry || undefined,
+        channel: (imp.channel as Channel) || "Facebook",
+        stage: "Initial Contact",
+        value: 0,
+        notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+        formNotes: imp.formNotes || undefined,
+        services: leadServices,
+        serviceType: imp.preferredCountry || undefined,
+      });
+    }
+
+    leads.push(targetLead);
 
     await ImportedLeadModel.updateOne(
       { id: imp.id },
@@ -1748,7 +1897,7 @@ export async function bulkAssignImportedLeads(
           status: "assigned",
           assignedToUserId: userId,
           assignedToUserName: userName,
-          assignedLeadId: createdLead.id,
+          assignedLeadId: targetLead.id,
           assignedAt: now,
         },
       }

@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Admin has their own panel — don't let them into the user dashboard
   if (session?.isAdmin) {
-    redirect("/admin");
+    redirect("/admin/dashboard");
   }
 
   const user = session?.userId ? await getUserById(session.userId) : undefined;

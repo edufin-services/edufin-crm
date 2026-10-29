@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 import ConfirmModal from "@/app/components/ConfirmModal";
 import type { Channel } from "@/lib/constants";
 import type { ImportedLead } from "@/lib/db";
-import { extractLeadFromRow, type ExtractedLeadRow } from "@/lib/lead-parser";
+import { decodeTextBytes, extractLeadFromRow, parseCsvToRows, type ExtractedLeadRow } from "@/lib/lead-parser";
 
 type UserItem = {
   id: string;
@@ -58,9 +58,11 @@ const initials = (name: string) =>
 export default function ImportLeadsClient({
   initialLeads,
   users,
+  existingContacts,
 }: {
   initialLeads: ImportedLead[];
   users: UserItem[];
+  existingContacts?: { phones: string[]; emails: string[] };
 }) {
   const [leads, setLeads] = useState<ImportedLead[]>(initialLeads);
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "assigned">("all");
@@ -142,31 +144,64 @@ export default function ImportLeadsClient({
     return { total, pending, assigned };
   }, [leads]);
 
-  // Preview deduplication analysis
+  // Preview deduplication analysis - checks both DB existing contacts and file duplicates
   const previewAnalysis = useMemo(() => {
-    const existingPhoneSet = new Set(
-      leads.map((l) => (l.phone || "").replace(/\D/g, "").slice(-10)).filter((p) => p.length >= 7)
-    );
-    const seenInPreview = new Set<string>();
+    const existingPhoneSet = new Set<string>();
+    const existingEmailSet = new Set<string>();
+
+    // Seed from all CRM leads & DB
+    if (existingContacts?.phones) {
+      existingContacts.phones.forEach((p) => {
+        if (p.length >= 7) existingPhoneSet.add(p);
+      });
+    }
+    if (existingContacts?.emails) {
+      existingContacts.emails.forEach((e) => {
+        if (e && e.includes("@")) existingEmailSet.add(e.toLowerCase().trim());
+      });
+    }
+
+    // Seed from current imported leads table
+    leads.forEach((l) => {
+      const p = (l.phone || "").replace(/\D/g, "").slice(-10);
+      if (p.length >= 7) existingPhoneSet.add(p);
+      if (l.email && l.email.includes("@")) existingEmailSet.add(l.email.trim().toLowerCase());
+    });
+
+    const seenInPreviewPhones = new Set<string>();
+    const seenInPreviewEmails = new Set<string>();
+    const seenInPreviewKeys = new Set<string>();
 
     let newCount = 0;
     let dupCount = 0;
 
     const analyzed = parsedPreview.map((item) => {
       const cleanP = (item.phone || "").replace(/\D/g, "").slice(-10);
-      const key = cleanP || item.name.toLowerCase().trim();
+      const cleanE = item.email && item.email.includes("@") ? item.email.trim().toLowerCase() : "";
+      const fallbackKey = cleanP || cleanE || item.name.toLowerCase().trim();
 
       let isDuplicate = false;
       let reason = "";
 
-      if (cleanP && existingPhoneSet.has(cleanP)) {
+      if (cleanP && cleanP.length >= 7 && existingPhoneSet.has(cleanP)) {
         isDuplicate = true;
-        reason = "Already in CRM / Queue";
-      } else if (seenInPreview.has(key)) {
+        reason = `Already in CRM / Queue (Phone: ${cleanP})`;
+      } else if (cleanE && existingEmailSet.has(cleanE)) {
+        isDuplicate = true;
+        reason = `Already in CRM / Queue (Email: ${cleanE})`;
+      } else if (cleanP && cleanP.length >= 7 && seenInPreviewPhones.has(cleanP)) {
+        isDuplicate = true;
+        reason = "Duplicate in this file (Same phone)";
+      } else if (cleanE && seenInPreviewEmails.has(cleanE)) {
+        isDuplicate = true;
+        reason = "Duplicate in this file (Same email)";
+      } else if (fallbackKey && seenInPreviewKeys.has(fallbackKey)) {
         isDuplicate = true;
         reason = "Duplicate in this file";
       } else {
-        seenInPreview.add(key);
+        if (cleanP && cleanP.length >= 7) seenInPreviewPhones.add(cleanP);
+        if (cleanE) seenInPreviewEmails.add(cleanE);
+        if (fallbackKey) seenInPreviewKeys.add(fallbackKey);
       }
 
       if (isDuplicate) dupCount++;
@@ -176,57 +211,87 @@ export default function ImportLeadsClient({
     });
 
     return { analyzed, newCount, dupCount };
-  }, [parsedPreview, leads]);
+  }, [parsedPreview, leads, existingContacts]);
 
   // Handle client-side file reading and parsing (supports .csv, .xls, .xlsx)
+  function processParsedRows(rows: Record<string, any>[], fileName: string) {
+    if (rows.length === 0) {
+      showToast("No data rows found in the uploaded file.", "error");
+      setIsUploading(false);
+      return;
+    }
+
+    const extracted: ExtractedLeadRow[] = [];
+    for (const row of rows) {
+      const leadItem = extractLeadFromRow(row, fileName);
+      if (leadItem) {
+        extracted.push(leadItem);
+      }
+    }
+
+    if (extracted.length === 0) {
+      showToast(
+        "Could not detect student name or phone columns in the file. Please check column headers.",
+        "error"
+      );
+      setIsUploading(false);
+      return;
+    }
+
+    setParsedPreview(extracted);
+    setPreviewFileName(fileName);
+    setShowPreviewModal(true);
+    setIsUploading(false);
+  }
+
   function parseExcelFile(file: File) {
     setIsUploading(true);
-    const reader = new FileReader();
+    const isCsv = file.name.toLowerCase().endsWith(".csv") || file.name.toLowerCase().endsWith(".tsv") || file.type.includes("csv");
 
+    const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) {
-          showToast("The uploaded file does not contain any readable sheets or data.", "error");
-          setIsUploading(false);
-          return;
-        }
+        const arrayBuf = e.target?.result as ArrayBuffer;
+        const u8 = new Uint8Array(arrayBuf);
+        let rows: Record<string, any>[] = [];
 
-        const worksheet = workbook.Sheets[firstSheetName];
-        const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        if (isCsv) {
+          // Decode text properly handling UTF-16LE (Meta Ads export format), UTF-8 BOM, and plain text
+          const text = decodeTextBytes(u8);
+          rows = parseCsvToRows(text);
 
-        if (rows.length === 0) {
-          showToast("No rows found in the uploaded file.", "error");
-          setIsUploading(false);
-          return;
-        }
-
-        const extracted: ExtractedLeadRow[] = [];
-        for (const row of rows) {
-          const leadItem = extractLeadFromRow(row, file.name);
-          if (leadItem) {
-            extracted.push(leadItem);
+          // If fallback needed, try XLSX with string type
+          if (rows.length === 0) {
+            const wb = XLSX.read(text, { type: "string", raw: true });
+            const firstSheet = wb.SheetNames[0];
+            if (firstSheet) {
+              rows = XLSX.utils.sheet_to_json(wb.Sheets[firstSheet], { defval: "" });
+            }
           }
+        } else {
+          // Excel .xls, .xlsx, or XML Spreadsheet
+          const workbook = XLSX.read(u8, { type: "array", codepage: 65001 });
+          const firstSheetName = workbook.SheetNames[0];
+          if (!firstSheetName) {
+            showToast("The uploaded file does not contain any readable sheets or data.", "error");
+            setIsUploading(false);
+            return;
+          }
+
+          const worksheet = workbook.Sheets[firstSheetName];
+          rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         }
 
-        if (extracted.length === 0) {
-          showToast("Could not find valid name or phone columns in the file.", "error");
-          setIsUploading(false);
-          return;
-        }
-
-        setParsedPreview(extracted);
-        setPreviewFileName(file.name);
-        setShowPreviewModal(true);
+        processParsedRows(rows, file.name);
       } catch (err: any) {
         showToast(`Failed to parse file: ${err?.message || "Unknown error"}`, "error");
-      } finally {
         setIsUploading(false);
       }
     };
-
+    reader.onerror = () => {
+      showToast("Error reading file.", "error");
+      setIsUploading(false);
+    };
     reader.readAsArrayBuffer(file);
   }
 
@@ -238,9 +303,24 @@ export default function ImportLeadsClient({
     e.target.value = "";
   }
 
-  // Upload parsed leads to server with automatic deduplication
+  // Upload parsed leads to server with automatic deduplication (only uploads unique new leads)
   async function confirmUploadLeads(assignToUserId?: string) {
     if (parsedPreview.length === 0) return;
+
+    // Filter to ONLY unique, new leads (ignore duplicates)
+    const newLeadsOnly = previewAnalysis.analyzed.filter((l) => !l.isDuplicate);
+
+    if (newLeadsOnly.length === 0) {
+      showToast(
+        `All ${previewAnalysis.dupCount} leads in this file already exist in the CRM / Queue. No duplicate leads were added.`,
+        "error"
+      );
+      setShowPreviewModal(false);
+      setParsedPreview([]);
+      setPreviewFileName("");
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -248,7 +328,7 @@ export default function ImportLeadsClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leads: parsedPreview.map((p) => ({
+          leads: newLeadsOnly.map((p) => ({
             ...p,
             fileName: previewFileName,
           })),
@@ -262,7 +342,7 @@ export default function ImportLeadsClient({
       }
 
       const newLeads: ImportedLead[] = data.leads || [];
-      const skippedCount: number = data.skippedCount || 0;
+      const skippedCount: number = (data.skippedCount || 0) + previewAnalysis.dupCount;
 
       if (newLeads.length === 0) {
         showToast(`All ${skippedCount} leads in this file already exist. No duplicate leads were added.`, "error");

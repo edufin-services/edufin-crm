@@ -5,7 +5,7 @@ import { createAdminSession, createSession } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
-  const { email, password } = body ?? {};
+  const { email, password, rememberMe = true } = body ?? {};
 
   if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
     return NextResponse.json({ error: "Please enter your email and password." }, { status: 400 });
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     email.trim().toLowerCase() === adminEmail.toLowerCase() &&
     password === adminPassword
   ) {
-    await createAdminSession();
+    await createAdminSession(rememberMe !== false);
     return NextResponse.json({ isAdmin: true });
   }
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
 
-  await createSession(user.id);
+  await createSession(user.id, rememberMe !== false);
 
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, company: user.company },

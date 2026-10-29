@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAllUsers, getImportedLeads } from "@/lib/db";
+import { getAllUsers, getExistingLeadContacts, getImportedLeads } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import ImportLeadsClient from "./ImportLeadsClient";
 
@@ -9,9 +9,10 @@ export default async function AdminImportLeadsPage() {
   const session = await getSession();
   if (!session?.isAdmin) redirect("/login");
 
-  const [importedLeads, users] = await Promise.all([
+  const [importedLeads, users, existingContacts] = await Promise.all([
     getImportedLeads(),
     getAllUsers(),
+    getExistingLeadContacts(),
   ]);
 
   const sanitizedUsers = users.map((u) => ({
@@ -27,6 +28,7 @@ export default async function AdminImportLeadsPage() {
     <ImportLeadsClient
       initialLeads={importedLeads}
       users={sanitizedUsers}
+      existingContacts={existingContacts}
     />
   );
 }

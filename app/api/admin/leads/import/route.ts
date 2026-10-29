@@ -10,18 +10,36 @@ import {
 } from "@/lib/db";
 import {
   cleanPhoneNumber,
+  decodeTextBytes,
   extractLeadFromRow,
   normalizePlatform,
+  parseCsvToRows,
   type ExtractedLeadRow,
 } from "@/lib/lead-parser";
 import { getSession } from "@/lib/session";
 
 function extractRowsFromWorkbook(buffer: ArrayBuffer | Buffer, fileName: string = ""): ExtractedLeadRow[] {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
-  const sheet = wb.Sheets[sheetName];
-  const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  let rawRows: Record<string, any>[] = [];
+  const isCsv = fileName.toLowerCase().endsWith(".csv") || fileName.toLowerCase().endsWith(".tsv");
+  const u8 = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : new Uint8Array(buffer as ArrayBuffer);
+
+  if (isCsv) {
+    const text = decodeTextBytes(u8);
+    rawRows = parseCsvToRows(text);
+    if (rawRows.length === 0) {
+      const wb = XLSX.read(text, { type: "string", raw: true, codepage: 65001 });
+      const sheetName = wb.SheetNames[0];
+      if (sheetName) {
+        rawRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });
+      }
+    }
+  } else {
+    const wb = XLSX.read(u8, { type: "array", codepage: 65001 });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) return [];
+    const sheet = wb.Sheets[sheetName];
+    rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  }
 
   const parsedLeads: ExtractedLeadRow[] = [];
   for (const row of rawRows) {
@@ -75,14 +93,14 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(body.leads)) {
       leadsToInsert = body.leads
         .map((l: any) => {
-          // If the item already has parsed form answers / fields
-          if (l.formNotes !== undefined || l.email !== undefined || l.city !== undefined) {
+          // If the item already has parsed/structured properties from client preview
+          if (l && typeof l === "object" && (l.phone !== undefined || l.name !== undefined || l.formNotes !== undefined)) {
             const { clean, raw } = cleanPhoneNumber(l.phone || l.rawPhone || l.whatsapp_number || l.number || l.mobile);
             const { platform, channel } = normalizePlatform(l.platform || l.channel || l.source);
             return {
               name: String(l.name || l.full_name || "Unnamed Lead").trim(),
               phone: clean || raw || "—",
-              rawPhone: raw,
+              rawPhone: raw || String(l.phone || ""),
               platform,
               channel,
               email: l.email || undefined,

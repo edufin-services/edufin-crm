@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
 import Logo from "../components/Logo";
 
 const HIGHLIGHTS = [
@@ -6,7 +8,16 @@ const HIGHLIGHTS = [
   "Track every student from first inquiry to admission & visa documents",
 ];
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession();
+
+  if (session?.isAdmin) {
+    redirect("/admin/dashboard");
+  }
+  if (session?.userId) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="flex min-h-screen w-full bg-white">
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-700 to-slate-900 p-12 text-white lg:flex">

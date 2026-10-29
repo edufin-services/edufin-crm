@@ -17,17 +17,21 @@ export type ExtractedLeadRow = {
 };
 
 /**
- * Normalizes a header or key: lowercases, removes non-alphanumeric chars (except ?).
+ * Normalizes a header or key: lowercases, strips BOM, and strips all punctuation/symbols except '?'.
+ * Handles cases like "Full Name *", "Phone Number (WhatsApp)", "Contact No.", etc.
  */
 export function normalizeKey(key: string): string {
   return String(key || "")
     .trim()
     .toLowerCase()
-    .replace(/[\s_-]+/g, "");
+    .replace(/^\uFEFF/, "")
+    .replace(/[^a-z0-9?]/g, "");
 }
 
 /**
  * Normalizes a phone number to standard 10 digits for Indian numbers, or clean digits.
+ * If the cleaned digits are fewer than 7 digits, it returns an empty string for `clean`
+ * to avoid matching short/invalid strings as duplicate phone numbers.
  */
 export function cleanPhoneNumber(val: unknown): { clean: string; raw: string } {
   const raw = String(val ?? "").trim();
@@ -39,6 +43,9 @@ export function cleanPhoneNumber(val: unknown): { clean: string; raw: string } {
     clean = digits.slice(1);
   } else if (digits.length > 10) {
     clean = digits.slice(-10);
+  }
+  if (clean.length < 7) {
+    clean = "";
   }
   return { clean, raw };
 }
@@ -67,23 +74,135 @@ export function normalizePlatform(val: unknown): { platform: string; channel: Ch
 }
 
 /**
+ * Automatically decodes raw byte arrays (Uint8Array) of text files,
+ * supporting UTF-16LE (Meta Ads export format), UTF-16BE, UTF-8 with BOM, and standard UTF-8.
+ */
+export function decodeTextBytes(u8: Uint8Array): string {
+  if (u8.length >= 2 && u8[0] === 0xff && u8[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(u8.subarray(2));
+  }
+  if (u8.length >= 2 && u8[0] === 0xfe && u8[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(u8.subarray(2));
+  }
+  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(u8.subarray(3));
+  }
+  // Check if UTF-16LE without BOM (every alternate byte is 0x00 for ASCII text)
+  if (u8.length >= 4 && u8[1] === 0x00 && u8[3] === 0x00) {
+    return new TextDecoder("utf-16le").decode(u8);
+  }
+  return new TextDecoder("utf-8").decode(u8);
+}
+
+/**
+ * Robust CSV parser that parses raw CSV/TSV text into an array of row objects.
+ * Automatically detects comma, semicolon, or tab delimiters.
+ * Properly handles quotes, escaped quotes (""), and multiline fields within quotes.
+ */
+export function parseCsvToRows(csvText: string): Record<string, any>[] {
+  const cleanText = csvText.replace(/^\uFEFF/, "").trim();
+  if (!cleanText) return [];
+
+  const firstLine = cleanText.split(/\r\n|\n|\r/)[0] || "";
+  let delimiter = ",";
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  if (semiCount > commaCount && semiCount > tabCount) delimiter = ";";
+  else if (tabCount > commaCount && tabCount > semiCount) delimiter = "\t";
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentField += '"';
+        i++; // skip escaped quote
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === delimiter) {
+        currentRow.push(currentField.trim());
+        currentField = "";
+      } else if (char === "\r") {
+        if (nextChar === "\n") i++; // handle CRLF
+        currentRow.push(currentField.trim());
+        currentField = "";
+        if (currentRow.some((f) => f.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else if (char === "\n") {
+        currentRow.push(currentField.trim());
+        currentField = "";
+        if (currentRow.some((f) => f.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else {
+        currentField += char;
+      }
+    }
+  }
+
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some((f) => f.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((h) => h.replace(/^["']|["']$/g, "").trim());
+  const dataRows: Record<string, any>[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const rowVals = rows[r];
+    const obj: Record<string, any> = {};
+    let hasVal = false;
+    headers.forEach((h, idx) => {
+      let val = rowVals[idx] ?? "";
+      if (typeof val === "string") val = val.replace(/^["']|["']$/g, "").trim();
+      obj[h] = val;
+      if (val) hasVal = true;
+    });
+    if (hasVal) {
+      dataRows.push(obj);
+    }
+  }
+
+  return dataRows;
+}
+
+/**
  * Formats a raw column header into a human-readable question title.
  * e.g., "what_is_your_neet_score?" -> "What is your neet score?"
  *       "preferred_country" -> "Preferred Country"
  */
 export function formatQuestionTitle(header: string): string {
   let cleaned = header
+    .replace(/^\uFEFF/, "")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/[_]+/g, " ")
-    .replace(/[:]+$/, "")
+    .replace(/[:*]+$/, "")
     .trim();
 
   if (!cleaned) return "Question";
 
-  // Capitalize words or first letter nicely
   const words = cleaned.split(/\s+/);
   const formattedWords = words.map((w, idx) => {
-    // Preserve words in ALL CAPS (like NEET, PCB, MBBS, USA, UK, CAD, INR)
     if (w.length > 1 && w === w.toUpperCase() && /^[A-Z0-9]+$/.test(w)) {
       return w;
     }
@@ -91,7 +210,6 @@ export function formatQuestionTitle(header: string): string {
     if (idx === 0) {
       return lower.charAt(0).toUpperCase() + lower.slice(1);
     }
-    // Capitalize acronyms or special words
     if (["neet", "pcb", "mbbs", "crm", "id", "dob", "nri", "lrs", "kyc"].includes(lower)) {
       return lower.toUpperCase();
     }
@@ -110,7 +228,6 @@ export function formatAnswerValue(val: string): string {
   if (lower === "student") return "Student";
   if (lower === "parent") return "Parent";
 
-  // Clean underscores into spaces
   let cleaned = str.replace(/[_]+/g, " ").trim();
   if (lower.includes("appearing")) {
     cleaned = cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -219,6 +336,27 @@ export function extractLeadFromRow(
 ): ExtractedLeadRow | null {
   if (!row || typeof row !== "object") return null;
 
+  // Handle single-column merged CSV rows where delimiter wasn't split by external reader
+  const initialKeys = Object.keys(row);
+  if (initialKeys.length === 1) {
+    const singleKey = initialKeys[0];
+    const singleVal = String(row[singleKey] ?? "");
+    let delimiter = "";
+    if (singleKey.includes(";")) delimiter = ";";
+    else if (singleKey.includes("\t")) delimiter = "\t";
+    else if (singleKey.includes(",")) delimiter = ",";
+
+    if (delimiter) {
+      const splitKeys = singleKey.split(delimiter).map((k) => k.replace(/^["']|["']$/g, "").trim());
+      const splitVals = singleVal.split(delimiter).map((v) => v.replace(/^["']|["']$/g, "").trim());
+      const newRow: Record<string, any> = {};
+      splitKeys.forEach((k, idx) => {
+        newRow[k] = splitVals[idx] ?? "";
+      });
+      return extractLeadFromRow(newRow, fileName);
+    }
+  }
+
   let nameVal = "";
   let firstNameVal = "";
   let lastNameVal = "";
@@ -277,7 +415,18 @@ export function extractLeadFromRow(
       norm === "student" ||
       norm === "yourname" ||
       norm === "applicantname" ||
-      norm === "personname"
+      norm === "personname" ||
+      norm === "username" ||
+      norm === "nameofstudent" ||
+      norm === "nameofcandidate" ||
+      norm === "candidatesname" ||
+      norm === "studentsname" ||
+      norm === "nameasperpassport" ||
+      norm === "nameasperaadhar" ||
+      norm === "firstandlastname" ||
+      norm.endsWith("studentname") ||
+      norm.endsWith("candidatename") ||
+      norm.endsWith("fullname")
     ) {
       if (!nameVal) nameVal = valStr;
       continue;
@@ -301,11 +450,31 @@ export function extractLeadFromRow(
       norm === "mobilenumber" ||
       norm === "mobileno" ||
       norm === "phoneno" ||
+      norm === "phno" ||
       norm === "contact" ||
       norm === "contactno" ||
       norm === "contactnumber" ||
       norm === "number" ||
-      norm === "tel"
+      norm === "tel" ||
+      norm === "telephone" ||
+      norm === "telephonenumber" ||
+      norm === "whatsappno" ||
+      norm === "whatsappnum" ||
+      norm === "phonenum" ||
+      norm === "mobilenum" ||
+      norm === "contactnum" ||
+      norm === "phonenumberwhatsapp" ||
+      norm === "whatsappphonenumber" ||
+      norm === "cell" ||
+      norm === "cellphone" ||
+      norm === "cellnumber" ||
+      norm === "primaryphone" ||
+      norm === "studentphone" ||
+      norm === "candidatephone" ||
+      norm.includes("phone") ||
+      norm.includes("mobile") ||
+      norm.includes("whatsapp") ||
+      norm.includes("contactno")
     ) {
       if (!phoneVal) phoneVal = valStr;
       continue;
@@ -316,7 +485,11 @@ export function extractLeadFromRow(
       norm === "email" ||
       norm === "emailaddress" ||
       norm === "emailid" ||
-      norm === "mail"
+      norm === "mail" ||
+      norm === "studentemail" ||
+      norm === "candidateemail" ||
+      norm === "primaryemail" ||
+      norm.includes("email")
     ) {
       if (!emailVal) emailVal = valStr;
       continue;
@@ -392,7 +565,6 @@ export function extractLeadFromRow(
       else if (ansFormatted.toLowerCase().includes("appearing")) neetVal = ansFormatted;
       else if (ansFormatted === "No") neetVal = "Not Qualified";
       else neetVal = ansFormatted;
-      // Also add to custom questions so the full question text is preserved in form answers
       customQuestions.push({
         key: norm,
         question: formatQuestionTitle(key),
@@ -429,16 +601,20 @@ export function extractLeadFromRow(
     nameVal = `${firstNameVal} ${lastNameVal}`.trim();
   }
 
-  // Positional fallback for column-less or unheadered rows
+  // Positional / content fallback if headers did not match standard labels
   if (!nameVal && !phoneVal && Object.keys(row).length > 0) {
-    const values = Object.values(row).map((v) => String(v ?? "").trim()).filter(Boolean);
-    if (values.length >= 3) {
-      platformVal = values[0];
-      nameVal = values[1];
-      phoneVal = values[2];
-    } else if (values.length === 2) {
-      nameVal = values[0];
-      phoneVal = values[1];
+    const entries = Object.entries(row);
+    for (const [, v] of entries) {
+      const val = String(v ?? "").trim();
+      if (!val) continue;
+      const { clean } = cleanPhoneNumber(val);
+      if (clean && clean.length >= 7 && !phoneVal) {
+        phoneVal = val;
+      } else if (!emailVal && val.includes("@") && val.includes(".")) {
+        emailVal = val;
+      } else if (!nameVal && !val.includes("@") && !/\d{6,}/.test(val)) {
+        nameVal = val;
+      }
     }
   }
 

@@ -1,21 +1,16 @@
-"use client";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+export default async function RootPage() {
+  const session = await getSession();
 
-export default function RootPage() {
-  const router = useRouter();
+  if (!session) {
+    redirect("/login");
+  }
 
-  useEffect(() => {
-    router.replace("/dashboard");
-  }, [router]);
+  if (session.isAdmin) {
+    redirect("/admin/dashboard");
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-      <div className="text-center space-y-3">
-        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-semibold text-slate-500">Loading EduFin CRM...</p>
-      </div>
-    </div>
-  );
+  redirect("/dashboard");
 }
