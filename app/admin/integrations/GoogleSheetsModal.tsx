@@ -39,7 +39,7 @@ export default function GoogleSheetsModal({
 
   if (!isOpen) return null;
 
-  const webhookUrl = `${origin || "https://your-crm-domain.com"}/api/webhooks/google-sheets`;
+  const webhookUrl = `${origin || "https://crm.edufinservices.com"}/api/webhooks/google-sheets`;
 
   const appsScriptCode = `/**
  * EduFin Services CRM - Google Sheets Real-Time Ingestion Script

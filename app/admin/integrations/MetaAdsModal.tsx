@@ -168,7 +168,7 @@ export default function MetaAdsModal({
 
   if (!isOpen) return null;
 
-  const webhookUrl = `${origin || "https://fxpertisetravel.vercel.app"}/api/webhooks/meta-ads`;
+  const webhookUrl = "https://crm.edufinservices.com/api/webhooks/meta-ads";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-xs">
@@ -294,14 +294,21 @@ export default function MetaAdsModal({
                 </div>
               ) : tokenInspection?.valid ? (
                 <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-4 text-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 font-bold text-emerald-900">
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                      Connected to Facebook Page: {tokenInspection.pageName || "Active"}
+                      Connected Facebook Page: {tokenInspection.pageName || "EduFin Services"}
                     </div>
-                    <span className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-bold">
-                      Page ID: {tokenInspection.pageId}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {tokenInspection.systemUserName && (
+                        <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-800">
+                          System User: {tokenInspection.systemUserName}
+                        </span>
+                      )}
+                      <span className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-bold">
+                        Page ID: {tokenInspection.pageId}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-1 border-t border-emerald-100">
@@ -311,11 +318,13 @@ export default function MetaAdsModal({
                           <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
-                          <span>Page is subscribed to <strong>leadgen</strong> webhooks. Real-time leads will flow in automatically!</span>
+                          <span>
+                            Page is subscribed to <strong>leadgen</strong> webhooks for Meta App &ldquo;{tokenInspection.subscribedAppName || "Edufin-CRM"}&rdquo;. Real-time leads sync directly into CRM!
+                          </span>
                         </>
                       ) : (
                         <div className="flex items-center gap-1 text-amber-900">
-                          <span className="text-amber-600 font-bold">⚠️ Warning:</span>
+                          <span className="text-amber-600 font-bold">⚠️ Action Required:</span>
                           <span>Page is not yet subscribed to webhook events. Click to subscribe:</span>
                         </div>
                       )}

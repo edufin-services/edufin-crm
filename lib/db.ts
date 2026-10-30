@@ -1494,6 +1494,9 @@ export type AdminSettings = {
   metaRoundRobinIndex?: number;
   globalRoundRobinIndex?: number;
   metaPageAccessToken?: string;
+  metaSystemUserToken?: string;
+  metaPageId?: string;
+  metaPageName?: string;
   metaVerifyToken?: string;
 };
 

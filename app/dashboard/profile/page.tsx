@@ -490,7 +490,7 @@ export default function ProfilePage() {
 
           <div>
             <label className={labelCls}>Company Name *</label>
-            <input required value={company.company} onChange={(e) => setCompany({ ...company, company: e.target.value })} className={inputCls} placeholder="e.g. FXpertise Travel & Forex" />
+            <input required value={company.company} onChange={(e) => setCompany({ ...company, company: e.target.value })} className={inputCls} placeholder="e.g. EduFin Services Pvt. Ltd." />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

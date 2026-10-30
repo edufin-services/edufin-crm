@@ -2,47 +2,94 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSettings, getAllUsers, getNextRoundRobinUser, updateAdminSettings } from "@/lib/db";
 import { getSession } from "@/lib/session";
 
-async function inspectMetaToken(token: string) {
+export async function inspectMetaToken(token: string) {
   if (!token) {
     return { valid: false, error: "No token configured", notConfigured: true };
   }
 
   try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${token}&fields=id,name`, {
-      signal: AbortSignal.timeout(6000),
+    // 1. Query /me to get identity
+    const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${token}&fields=id,name`, {
+      signal: AbortSignal.timeout(7000),
     });
-    const data = await res.json().catch(() => null);
+    const meData = await meRes.json().catch(() => null);
 
-    if (res.ok && data?.id) {
-      let isSubscribed = false;
-      try {
-        const subRes = await fetch(`https://graph.facebook.com/v21.0/${data.id}/subscribed_apps?access_token=${token}`, {
-          signal: AbortSignal.timeout(6000),
-        });
-        const subData = await subRes.json().catch(() => null);
-        if (subRes.ok && Array.isArray(subData?.data)) {
-          isSubscribed = subData.data.some((app: any) =>
-            Array.isArray(app.subscribed_fields) && app.subscribed_fields.includes("leadgen")
-          );
-        }
-      } catch {
-        // non-fatal
-      }
-
+    if (!meRes.ok || !meData?.id) {
       return {
-        valid: true,
-        pageId: data.id,
-        pageName: data.name,
-        isPageSubscribed: isSubscribed,
+        valid: false,
+        error: meData?.error?.message || `HTTP ${meRes.status}`,
+        errorType: meData?.error?.type,
+        errorCode: meData?.error?.code,
+        errorSubcode: meData?.error?.error_subcode,
       };
     }
 
+    // 2. Check /me/accounts to see if this is a System User or User token managing Facebook Pages
+    let resolvedPageId = meData.id;
+    let resolvedPageName = meData.name;
+    let resolvedPageAccessToken = token;
+    let tokenType: "PAGE" | "SYSTEM_USER" = "PAGE";
+    let systemUserName = "";
+    let systemUserId = "";
+
+    try {
+      const accRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${token}`, {
+        signal: AbortSignal.timeout(7000),
+      });
+      const accData = await accRes.json().catch(() => null);
+
+      if (accRes.ok && Array.isArray(accData?.data) && accData.data.length > 0) {
+        tokenType = "SYSTEM_USER";
+        systemUserId = meData.id;
+        systemUserName = meData.name;
+
+        // Pick the managed Page (e.g. EduFin Services)
+        const page = accData.data[0];
+        resolvedPageId = page.id;
+        resolvedPageName = page.name;
+        resolvedPageAccessToken = page.access_token || token;
+      }
+    } catch {
+      // non-fatal
+    }
+
+    // 3. Check whether the resolved Facebook Page is subscribed to leadgen Webhooks
+    let isSubscribed = false;
+    let subscribedAppName = "";
+    let subscribedAppId = "";
+
+    try {
+      const subRes = await fetch(
+        `https://graph.facebook.com/v21.0/${resolvedPageId}/subscribed_apps?access_token=${resolvedPageAccessToken}`,
+        { signal: AbortSignal.timeout(7000) }
+      );
+      const subData = await subRes.json().catch(() => null);
+
+      if (subRes.ok && Array.isArray(subData?.data)) {
+        const app = subData.data.find((a: any) =>
+          Array.isArray(a.subscribed_fields) && a.subscribed_fields.includes("leadgen")
+        );
+        if (app) {
+          isSubscribed = true;
+          subscribedAppName = app.name || "";
+          subscribedAppId = app.id || "";
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
     return {
-      valid: false,
-      error: data?.error?.message || `HTTP ${res.status}`,
-      errorType: data?.error?.type,
-      errorCode: data?.error?.code,
-      errorSubcode: data?.error?.error_subcode,
+      valid: true,
+      tokenType,
+      systemUserId,
+      systemUserName,
+      pageId: resolvedPageId,
+      pageName: resolvedPageName,
+      pageAccessToken: resolvedPageAccessToken,
+      isPageSubscribed: isSubscribed,
+      subscribedAppName,
+      subscribedAppId,
     };
   } catch (err: any) {
     return {
@@ -61,8 +108,14 @@ export async function GET() {
   const settings = await getAdminSettings();
   const allUsers = await getAllUsers();
 
-  const tokenInDb = (settings as any)?.metaPageAccessToken || "";
-  const tokenInEnv = process.env.META_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || "";
+  const tokenInDb =
+    (settings as any)?.metaPageAccessToken ||
+    (settings as any)?.metaSystemUserToken ||
+    "";
+  const tokenInEnv =
+    process.env.META_PAGE_ACCESS_TOKEN ||
+    process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
+    "";
   const effectiveToken = tokenInDb || tokenInEnv;
 
   const verifyToken =
@@ -112,45 +165,59 @@ export async function POST(request: NextRequest) {
   }
 
   const settings = await getAdminSettings();
-  const tokenInDb = (settings as any)?.metaPageAccessToken || "";
-  const tokenInEnv = process.env.META_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || "";
+  const tokenInDb =
+    (settings as any)?.metaPageAccessToken ||
+    (settings as any)?.metaSystemUserToken ||
+    "";
+  const tokenInEnv =
+    process.env.META_PAGE_ACCESS_TOKEN ||
+    process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
+    "";
   const effectiveToken = tokenInDb || tokenInEnv;
 
   if (!effectiveToken) {
-    return NextResponse.json({ error: "No Meta Page Access Token configured." }, { status: 400 });
+    return NextResponse.json({ error: "No Meta Access Token configured." }, { status: 400 });
   }
 
+  const inspection = await inspectMetaToken(effectiveToken);
+  if (!inspection.valid || !inspection.pageId) {
+    return NextResponse.json(
+      { error: inspection.error || "Cannot validate token with Meta Graph API." },
+      { status: 400 }
+    );
+  }
+
+  const targetPageId = inspection.pageId;
+  const targetToken = inspection.pageAccessToken || effectiveToken;
+
   try {
-    const pageRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${effectiveToken}&fields=id,name`, {
-      signal: AbortSignal.timeout(6000),
-    });
-    const pageData = await pageRes.json().catch(() => null);
-
-    if (!pageRes.ok || !pageData?.id) {
-      return NextResponse.json(
-        { error: pageData?.error?.message || "Cannot access Facebook Page. Token may be expired or invalid." },
-        { status: 400 }
-      );
-    }
-
-    const subRes = await fetch(`https://graph.facebook.com/v21.0/${pageData.id}/subscribed_apps`, {
+    const subRes = await fetch(`https://graph.facebook.com/v21.0/${targetPageId}/subscribed_apps`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         subscribed_fields: ["leadgen"],
-        access_token: effectiveToken,
+        access_token: targetToken,
       }),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(7000),
     });
 
     const subData = await subRes.json().catch(() => null);
 
     if (subRes.ok && (subData?.success || subData?.data)) {
+      if (inspection.pageAccessToken && inspection.pageAccessToken !== (settings as any)?.metaPageAccessToken) {
+        await updateAdminSettings({
+          metaPageAccessToken: inspection.pageAccessToken,
+          metaSystemUserToken: effectiveToken,
+          metaPageId: inspection.pageId,
+          metaPageName: inspection.pageName,
+        });
+      }
+
       return NextResponse.json({
         success: true,
-        message: `Successfully subscribed page "${pageData.name}" (${pageData.id}) to real-time Leadgen Webhooks!`,
-        pageId: pageData.id,
-        pageName: pageData.name,
+        message: `Successfully subscribed page "${inspection.pageName}" (${targetPageId}) to real-time Leadgen Webhooks!`,
+        pageId: targetPageId,
+        pageName: inspection.pageName,
       });
     }
 
@@ -175,22 +242,68 @@ export async function PATCH(request: NextRequest) {
   }
 
   const updates: Record<string, any> = {};
+  let rawToken = "";
   if (typeof body.metaPageAccessToken === "string") {
-    updates.metaPageAccessToken = body.metaPageAccessToken.trim();
+    rawToken = body.metaPageAccessToken.trim();
   }
   if (typeof body.metaVerifyToken === "string" && body.metaVerifyToken.trim()) {
     updates.metaVerifyToken = body.metaVerifyToken.trim();
   }
 
+  let tokenInspection: any = null;
+
+  if (rawToken) {
+    tokenInspection = await inspectMetaToken(rawToken);
+    if (tokenInspection.valid) {
+      // Store both the resolved Page token and the System User token
+      updates.metaPageAccessToken = tokenInspection.pageAccessToken || rawToken;
+      updates.metaSystemUserToken = rawToken;
+      updates.metaPageId = tokenInspection.pageId;
+      updates.metaPageName = tokenInspection.pageName;
+
+      // Automatically auto-subscribe Page to webhooks if not already subscribed
+      if (!tokenInspection.isPageSubscribed && tokenInspection.pageId) {
+        try {
+          const autoSub = await fetch(
+            `https://graph.facebook.com/v21.0/${tokenInspection.pageId}/subscribed_apps`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                subscribed_fields: ["leadgen"],
+                access_token: tokenInspection.pageAccessToken || rawToken,
+              }),
+              signal: AbortSignal.timeout(7000),
+            }
+          );
+          const autoSubData = await autoSub.json().catch(() => null);
+          if (autoSub.ok && (autoSubData?.success || autoSubData?.data)) {
+            tokenInspection.isPageSubscribed = true;
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+    } else {
+      updates.metaPageAccessToken = rawToken;
+    }
+  }
+
   const updated = await updateAdminSettings(updates);
-  const effectiveToken = (updated as any)?.metaPageAccessToken || process.env.META_PAGE_ACCESS_TOKEN || "";
-  const tokenInspection = await inspectMetaToken(effectiveToken);
+  const effectiveToken =
+    (updated as any)?.metaPageAccessToken ||
+    (updated as any)?.metaSystemUserToken ||
+    "";
+
+  if (!tokenInspection) {
+    tokenInspection = await inspectMetaToken(effectiveToken);
+  }
 
   return NextResponse.json({
     success: true,
     message: "Meta Lead Ads configuration updated successfully.",
     verifyToken: (updated as any)?.metaVerifyToken || "fx_meta_leads_token_2026",
-    hasPageAccessToken: !!(updated as any)?.metaPageAccessToken,
+    hasPageAccessToken: !!effectiveToken,
     tokenInspection,
   });
 }

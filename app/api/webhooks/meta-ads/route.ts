@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
 
     const pageAccessToken =
       (adminSettings as any)?.metaPageAccessToken ||
+      (adminSettings as any)?.metaSystemUserToken ||
       process.env.META_PAGE_ACCESS_TOKEN ||
       process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
       "";
