@@ -590,7 +590,7 @@ async function ensureUsersHaveId() {
 export async function getAllUsers(): Promise<User[]> {
   await dbConnect();
   await ensureUsersHaveId();
-  const docs = await UserModel.find({});
+  const docs = await UserModel.find({}).lean();
   return docs.map((d) => {
     const u = toPlain<User>(d);
     if (!u.createdAt || isNaN(new Date(u.createdAt).getTime())) {
@@ -609,7 +609,7 @@ export async function deleteUser(id: string): Promise<boolean> {
 
 export async function getAllLeads(): Promise<Lead[]> {
   await dbConnect();
-  const docs = await LeadModel.find({ deletedAt: null }).sort({ createdAt: -1 });
+  const docs = await LeadModel.find({ deletedAt: null }).sort({ createdAt: -1 }).lean();
   return docs.map((d) => {
     const l = toPlain<Lead>(d);
     l.stage = normalizeStage(l.stage);
@@ -619,7 +619,7 @@ export async function getAllLeads(): Promise<Lead[]> {
 
 export async function getLeadsByOwner(ownerId: string): Promise<Lead[]> {
   await dbConnect();
-  const docs = await LeadModel.find({ ownerId, deletedAt: null }).sort({ createdAt: -1 });
+  const docs = await LeadModel.find({ ownerId, deletedAt: null }).sort({ createdAt: -1 }).lean();
   return docs.map((d) => {
     const l = toPlain<Lead>(d);
     l.stage = normalizeStage(l.stage);
@@ -1016,11 +1016,22 @@ export async function deleteContact(id: string, ownerId: string): Promise<void> 
 
 // ── Conversations ──────────────────────────────────────────────────────────
 
+let dummyConversationsCleaned = false;
+async function cleanDummyConversations() {
+  if (dummyConversationsCleaned) return;
+  dummyConversationsCleaned = true;
+  try {
+    await ConversationModel.deleteMany({ name: { $in: ["Ananya Sharma", "Rohan Verma", "Priya Patel"] } });
+  } catch {}
+}
+
 export async function getAllConversations(): Promise<Conversation[]> {
   await dbConnect();
-  await ConversationModel.deleteMany({ name: { $in: ["Ananya Sharma", "Rohan Verma", "Priya Patel"] } });
-  const docs = await ConversationModel.find({}).sort({ updatedAt: -1 });
-  const users = await UserModel.find({});
+  await cleanDummyConversations();
+  const [docs, users] = await Promise.all([
+    ConversationModel.find({}).sort({ updatedAt: -1 }).lean(),
+    UserModel.find({}).lean(),
+  ]);
   const userMap = new Map<string, { name: string; email: string }>();
   users.forEach((u) => {
     userMap.set(u.id, { name: u.name, email: u.email });
@@ -1039,9 +1050,8 @@ export async function getAllConversations(): Promise<Conversation[]> {
 
 export async function getConversationsByOwner(ownerId: string): Promise<Conversation[]> {
   await dbConnect();
-  // Delete any sample dummy conversations if they exist
-  await ConversationModel.deleteMany({ ownerId, name: { $in: ["Ananya Sharma", "Rohan Verma", "Priya Patel"] } });
-  const docs = await ConversationModel.find({ ownerId }).sort({ updatedAt: -1 });
+  await cleanDummyConversations();
+  const docs = await ConversationModel.find({ ownerId }).sort({ updatedAt: -1 }).lean();
   return docs.map((d) => toPlain<Conversation>(d));
 }
 
@@ -1122,13 +1132,13 @@ export async function markConversationRead(id: string, ownerId?: string, isAdmin
 
 export async function getTasksByOwner(ownerId: string): Promise<Task[]> {
   await dbConnect();
-  const docs = await TaskModel.find({ ownerId }).sort({ dueDate: 1 });
+  const docs = await TaskModel.find({ ownerId }).sort({ dueDate: 1 }).lean();
   return docs.map((d) => toPlain<Task>(d));
 }
 
 export async function getAllTasks(): Promise<Task[]> {
   await dbConnect();
-  const docs = await TaskModel.find({}).sort({ dueDate: 1 });
+  const docs = await TaskModel.find({}).sort({ dueDate: 1 }).lean();
   return docs.map((d) => toPlain<Task>(d));
 }
 
@@ -1223,54 +1233,64 @@ export async function seedAccountData(_ownerId: string): Promise<void> {
 
 // ── FXPertise Forex & Marketplace DB Helpers ─────────────────────────────
 
+let branchesSeeded = false;
+async function seedDefaultBranches() {
+  if (branchesSeeded) return;
+  branchesSeeded = true;
+  try {
+    // One-time migration fallback for legacy users created prior to branch selection
+    await UserModel.updateMany(
+      { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /mouparna/i } },
+      { $set: { branchId: "br-kolkata-01", branchName: "Kolkata Branch" } }
+    );
+    await UserModel.updateMany(
+      { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /sheeba/i } },
+      { $set: { branchId: "br-delhi-01", branchName: "Delhi NCR Branch" } }
+    );
+
+    const defaultBranches = [
+      {
+        id: "br-delhi-01",
+        name: "Delhi NCR Branch",
+        city: "Delhi NCR",
+        address: "Inner Circle, Connaught Place, New Delhi 110001",
+        phone: "+91 98100 11223",
+        email: "delhi@edufinservices.com",
+        kycStatus: "verified",
+        status: "active",
+        walletBalance: 180000,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "br-kolkata-01",
+        name: "Kolkata Branch",
+        city: "Kolkata",
+        address: "Park Street / Salt Lake Sector V, Kolkata 700016",
+        phone: "+91 98300 55443",
+        email: "kolkata@edufinservices.com",
+        kycStatus: "verified",
+        status: "active",
+        walletBalance: 150000,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    for (const b of defaultBranches) {
+      const existing = await BranchModel.findOne({ id: b.id }).lean();
+      if (!existing) {
+        await BranchModel.create(b).catch(() => {});
+      } else if (existing.name !== b.name) {
+        await BranchModel.updateOne({ id: b.id }, { $set: { name: b.name, city: b.city } }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[seedDefaultBranches] Error:", err);
+  }
+}
+
 export async function getAllBranches() {
   await dbConnect();
-
-  // One-time migration fallback for legacy users created prior to branch selection
-  await UserModel.updateMany(
-    { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /mouparna/i } },
-    { $set: { branchId: "br-kolkata-01", branchName: "Kolkata Branch" } }
-  ).catch(() => {});
-  await UserModel.updateMany(
-    { $or: [{ branchId: { $exists: false } }, { branchId: null }, { branchId: "" }], email: { $regex: /sheeba/i } },
-    { $set: { branchId: "br-delhi-01", branchName: "Delhi NCR Branch" } }
-  ).catch(() => {});
-
-  const defaultBranches = [
-    {
-      id: "br-delhi-01",
-      name: "Delhi NCR Branch",
-      city: "Delhi NCR",
-      address: "Inner Circle, Connaught Place, New Delhi 110001",
-      phone: "+91 98100 11223",
-      email: "delhi@edufinservices.com",
-      kycStatus: "verified",
-      status: "active",
-      walletBalance: 180000,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "br-kolkata-01",
-      name: "Kolkata Branch",
-      city: "Kolkata",
-      address: "Park Street / Salt Lake Sector V, Kolkata 700016",
-      phone: "+91 98300 55443",
-      email: "kolkata@edufinservices.com",
-      kycStatus: "verified",
-      status: "active",
-      walletBalance: 150000,
-      createdAt: new Date().toISOString(),
-    },
-  ];
-
-  for (const b of defaultBranches) {
-    const existing = await BranchModel.findOne({ id: b.id });
-    if (!existing) {
-      await BranchModel.create(b).catch(() => {});
-    } else if (existing.name !== b.name) {
-      await BranchModel.updateOne({ id: b.id }, { $set: { name: b.name, city: b.city } }).catch(() => {});
-    }
-  }
+  await seedDefaultBranches();
 
   const docs = await BranchModel.find({
     $or: [
@@ -1279,7 +1299,7 @@ export async function getAllBranches() {
       { city: { $regex: /delhi/i } },
       { city: { $regex: /kolkata/i } },
     ],
-  });
+  }).lean();
   return docs.map((d) => toPlain(d));
 }
 

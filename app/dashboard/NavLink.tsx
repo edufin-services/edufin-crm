@@ -22,13 +22,14 @@ export default function NavLink({
   return (
     <Link
       href={href}
+      prefetch={true}
       title={collapsed ? labelText : undefined}
       className={`group relative flex items-center rounded-xl text-[12px] font-medium transition-all duration-150 ${
         collapsed ? "justify-center px-1.5 py-1.5" : "gap-2 px-2.5 py-1.5"
       } ${
         isActive
           ? "bg-[#ecfdf5] text-[#065f46] font-bold border border-[#a7f3d0]/60 shadow-2xs"
-          : "text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900"
+          : "text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900 active:scale-[0.98]"
       }`}
     >
       {/* Signature left pill indicator matching reference CRM */}
@@ -50,4 +51,3 @@ export default function NavLink({
     </Link>
   );
 }
-
