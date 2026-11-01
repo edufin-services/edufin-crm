@@ -51,6 +51,9 @@ export function extractFormAndUserNotes(
         lowerClean.startsWith("campaign:") ||
         lowerClean.startsWith("adset:") ||
         lowerClean.startsWith("ad:") ||
+        lowerClean.includes("· adset:") ||
+        lowerClean.includes("· ad:") ||
+        lowerClean.startsWith("imported via") ||
         lowerClean.startsWith("assigned:") ||
         lowerClean.startsWith("form id:") ||
         lowerClean.includes("leadgen id:") ||
@@ -257,14 +260,14 @@ export default function ViewNoteModal({
       onTouchMove={(e) => e.stopPropagation()}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200/90 overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200/90 overflow-hidden flex flex-col max-h-[88vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-zinc-100 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100 shrink-0">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold text-zinc-900 tracking-tight">
+              <h2 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
                 Notes for {lead.name}
               </h2>
               {answers.length > 0 && (
@@ -273,7 +276,7 @@ export default function ViewNoteModal({
                 </span>
               )}
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">Enquiry notes &amp; customer responses</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">Enquiry notes &amp; customer responses</p>
           </div>
           <button
             onClick={onClose}
@@ -287,23 +290,23 @@ export default function ViewNoteModal({
 
         {/* Modal Scrollable Body */}
         <div
-          className="p-6 space-y-4 overflow-y-auto overscroll-contain"
+          className="p-4 space-y-3 overflow-y-auto overscroll-contain flex-1"
           onWheel={(e) => e.stopPropagation()}
         >
           {/* ── Compact Customer Form Answers ── */}
           {answers.length > 0 && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 px-3.5 py-2.5 shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800 block mb-1.5">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 px-3 py-2 shadow-2xs">
+              <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-800 block mb-1">
                 Customer Form Answers
               </span>
               <div className="divide-y divide-indigo-100/60 text-xs">
                 {answers.map((ans, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+                    className="flex items-center justify-between gap-3 py-1 first:pt-0 last:pb-0"
                   >
-                    <span className="font-semibold text-zinc-600">{ans.q}:</span>
-                    <span className="font-extrabold text-zinc-900 text-right">{ans.a || "—"}</span>
+                    <span className="font-semibold text-zinc-600 text-[11.5px]">{ans.q}:</span>
+                    <span className="font-extrabold text-zinc-900 text-right text-[11.5px]">{ans.a || "—"}</span>
                   </div>
                 ))}
               </div>
@@ -312,11 +315,11 @@ export default function ViewNoteModal({
 
           {/* ── Enquiry Notes (Agent Editable Note) ── */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-black uppercase tracking-wider text-zinc-700">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-700">
                 Enquiry Notes &amp; Remarks
               </label>
-              <span className="text-[11px] text-zinc-400 font-medium">
+              <span className="text-[10px] text-zinc-400 font-medium">
                 Internal CRM remarks
               </span>
             </div>
@@ -324,29 +327,29 @@ export default function ViewNoteModal({
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Write any note, discussion details, or follow-up remarks for this enquiry..."
-              rows={4}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 text-sm text-zinc-900 font-medium placeholder:text-zinc-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all resize-none shadow-2xs"
+              rows={3}
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-2.5 text-xs text-zinc-900 font-medium placeholder:text-zinc-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all resize-none shadow-2xs"
             />
           </div>
+        </div>
 
-          {/* Modal Footer Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-1 border-t border-zinc-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-zinc-200 px-4 py-2.5 text-xs font-bold text-zinc-600 hover:bg-zinc-50 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-emerald-600/20 disabled:opacity-60 transition-all cursor-pointer"
-            >
-              {saving ? "Saving…" : "Save Note"}
-            </button>
-          </div>
+        {/* Modal Footer Actions - pinned at the bottom */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-100 bg-zinc-50/60 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-200 bg-white px-3.5 py-1.5 text-xs font-bold text-zinc-600 hover:bg-zinc-50 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 text-xs font-extrabold text-white shadow-sm shadow-emerald-600/20 disabled:opacity-60 transition-all cursor-pointer"
+          >
+            {saving ? "Saving…" : "Save Note"}
+          </button>
         </div>
       </div>
     </div>

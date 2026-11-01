@@ -680,16 +680,8 @@ export function extractLeadFromRow(
 
   const formNotes = formNotesLines.join("\n");
 
-  // Construct notes (campaign, adset, ad, form - never mention file names)
-  const notesParts: string[] = [];
-  if (campaignVal) notesParts.push(`Campaign: ${campaignVal}`);
-  if (adsetVal) notesParts.push(`AdSet: ${adsetVal}`);
-  if (adVal) notesParts.push(`Ad: ${adVal}`);
-  if (formNameVal) notesParts.push(`Form: ${formNameVal}`);
-  if (notesParts.length === 0) {
-    notesParts.push(`Imported via Platform: ${platform.toUpperCase()}`);
-  }
-  const notes = notesParts.join(" · ");
+  // Keep user notes clean (never dump campaign / adset / ad technical metadata into notes)
+  const notes = "";
 
   return {
     name: nameVal || "Unnamed Lead",

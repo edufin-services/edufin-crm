@@ -13,6 +13,10 @@ export type DrawerLead = {
   name: string;
   channel: Channel;
   platform?: string;
+  campaign?: string;
+  adset?: string;
+  adName?: string;
+  formName?: string;
   stage: Stage;
   createdAt: string;
   ownerId?: string;
@@ -496,7 +500,21 @@ export default function LeadDrawer({
   }, [currentUserId, assignAgentId, lead.ownerId, lead.assignAgent, teamMembers]);
   // Pipeline fields
   const [color, setColor] = useState(lead.color ?? "");
-  const [notes, setNotes] = useState(lead.notes ?? "");
+  const [notes, setNotes] = useState(() => {
+    const raw = lead.notes ?? "";
+    const lower = raw.trim().toLowerCase();
+    if (
+      lower.startsWith("campaign:") ||
+      lower.startsWith("adset:") ||
+      lower.startsWith("ad:") ||
+      lower.startsWith("imported via") ||
+      lower.includes("· adset:") ||
+      lower.includes("· ad:")
+    ) {
+      return "";
+    }
+    return raw;
+  });
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
     if (lead.preferredCountry && lead.preferredCountry.trim().toLowerCase() !== "others") return [lead.preferredCountry];
     if (lead.services && lead.services.length > 0) {
@@ -1539,6 +1557,9 @@ export default function LeadDrawer({
                   { label: "Created", value: formatRelativeTime(lead.createdAt) },
                   { label: "Channel", value: lead.channel },
                   ...(lead.platform ? [{ label: "Platform", value: lead.platform === "fb" ? "Facebook (fb)" : lead.platform === "ig" ? "Instagram (ig)" : lead.platform.toUpperCase() }] : []),
+                  ...(lead.campaign ? [{ label: "Campaign", value: lead.campaign }] : []),
+                  ...(lead.adset ? [{ label: "AdSet", value: lead.adset }] : []),
+                  ...(lead.adName ? [{ label: "Ad", value: lead.adName }] : []),
                   { label: "ID", value: lead.id.slice(0, 8).toUpperCase() },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-zinc-100">

@@ -80,7 +80,7 @@ function ChannelIcon({ channel, platform, className = "h-3.5 w-3.5" }: { channel
   }
   if (normPlatform === "ig" || normPlatform.includes("insta") || channel === "Instagram") {
     return (
-      <svg className={`${className} text-pink-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <svg className={`${className} text-[#E1306C]`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
         <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
         <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
@@ -96,7 +96,7 @@ function ChannelIcon({ channel, platform, className = "h-3.5 w-3.5" }: { channel
       );
     case "Instagram":
       return (
-        <svg className={`${className} text-pink-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <svg className={`${className} text-[#E1306C]`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
           <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
           <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
@@ -115,7 +115,7 @@ function ChannelIcon({ channel, platform, className = "h-3.5 w-3.5" }: { channel
     case "Meta Ads":
       return (
         <svg className={`${className} text-[#0081FB]`} viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+          <path d="M16.965 5.568c-1.996 0-3.42 1.066-4.965 2.875-1.545-1.809-2.969-2.875-4.965-2.875C3.398 5.568 0.5 8.441 0.5 12.005c0 3.564 2.898 6.437 6.535 6.437 2.115 0 3.654-1.127 5.066-3.003 1.412 1.876 2.951 3.003 5.066 3.003 3.637 0 6.535-2.873 6.535-6.437 0-3.564-2.898-6.437-6.737-6.437zm0 10.457c-2.197 0-3.785-1.697-4.965-3.593 1.18-1.896 2.768-3.593 4.965-3.593 2.268 0 4.098 1.621 4.098 3.593 0 1.972-1.83 3.593-4.098 3.593zm-9.93 0c-2.268 0-4.098-1.621-4.098-3.593 0-1.972 1.83-3.593 4.098-3.593 2.197 0 3.785 1.697 4.965 3.593-1.18 1.896-2.768 3.593-4.965 3.593z"/>
         </svg>
       );
     case "Ads":
@@ -153,7 +153,17 @@ function ChannelIcon({ channel, platform, className = "h-3.5 w-3.5" }: { channel
   }
 }
 
-function LeadPlatformBadge({ channel, platform, isColored }: { channel?: Channel | string; platform?: string; isColored?: boolean }) {
+function LeadPlatformBadge({
+  channel,
+  platform,
+  isColored,
+  iconOnly = false,
+}: {
+  channel?: Channel | string;
+  platform?: string;
+  isColored?: boolean;
+  iconOnly?: boolean;
+}) {
   const normPlat = (platform || "").toLowerCase();
   const isFb = normPlat === "fb" || normPlat.includes("face") || channel === "Facebook";
   const isIg = normPlat === "ig" || normPlat.includes("insta") || channel === "Instagram";
@@ -190,6 +200,19 @@ function LeadPlatformBadge({ channel, platform, isColored }: { channel?: Channel
     theme = "bg-amber-50 text-amber-700 border-amber-200";
   }
 
+  const tooltipTitle = `Channel: ${channel || "N/A"}${platform ? ` · Platform: ${platform}` : ""}`;
+
+  if (iconOnly) {
+    return (
+      <span
+        className="inline-flex items-center justify-center shrink-0 self-center"
+        title={tooltipTitle}
+      >
+        <ChannelIcon channel={channel} platform={platform} className="h-4 w-4 shrink-0" />
+      </span>
+    );
+  }
+
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold border shrink-0 ${
@@ -197,7 +220,7 @@ function LeadPlatformBadge({ channel, platform, isColored }: { channel?: Channel
           ? "bg-white text-zinc-900 border-white/60 shadow-2xs"
           : theme
       }`}
-      title={`Channel: ${channel || "N/A"}${platform ? ` · Platform: ${platform}` : ""}`}
+      title={tooltipTitle}
     >
       <ChannelIcon channel={channel} platform={platform} className="h-3 w-3 shrink-0" />
       <span>{label}</span>
@@ -1254,7 +1277,7 @@ export default function AdminLeadsClient({
                               </span>
                             )}
 
-                            <LeadPlatformBadge channel={deal.channel} platform={deal.platform} isColored={isColored} />
+                            <LeadPlatformBadge channel={deal.channel} platform={deal.platform} isColored={isColored} iconOnly />
                           </div>
 
                           {/* Row 4: Service Pill & Deal Value */}

@@ -67,6 +67,10 @@ export type Lead = {
   name: string;
   channel: Channel;
   platform?: string;
+  campaign?: string;
+  adset?: string;
+  adName?: string;
+  formName?: string;
   value: number;
   stage: Stage;
   createdAt: string;
@@ -729,7 +733,7 @@ export async function updateLead(
   id: string,
   ownerId: string,
   updates: Partial<Pick<Lead,
-    "stage" | "value" | "name" | "channel" | "platform" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
+    "stage" | "value" | "name" | "channel" | "platform" | "campaign" | "adset" | "adName" | "formName" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" | "ownerId" |
     "assignedBranchId" | "assignedBranchName" |
     "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
@@ -832,7 +836,7 @@ export async function getLeadByIdAdmin(id: string): Promise<Lead | undefined> {
 export async function updateLeadAdmin(
   id: string,
   updates: Partial<Pick<Lead,
-    "ownerId" | "stage" | "value" | "name" | "channel" | "platform" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
+    "ownerId" | "stage" | "value" | "name" | "channel" | "platform" | "campaign" | "adset" | "adName" | "formName" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" |
     "assignedBranchId" | "assignedBranchName" |
     "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
@@ -1822,7 +1826,7 @@ export async function assignImportedLead(
       platform: imp.platform || undefined,
       stage: "Initial Contact",
       value: 0,
-      notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+      notes: (imp.notes && !imp.notes.toLowerCase().startsWith("campaign:") && !imp.notes.toLowerCase().startsWith("imported via")) ? imp.notes : "",
       formNotes: imp.formNotes || undefined,
       services: leadServices,
       serviceType: imp.preferredCountry || undefined,
@@ -1907,7 +1911,7 @@ export async function bulkAssignImportedLeads(
         platform: imp.platform || undefined,
         stage: "Initial Contact",
         value: 0,
-        notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+        notes: (imp.notes && !imp.notes.toLowerCase().startsWith("campaign:") && !imp.notes.toLowerCase().startsWith("imported via")) ? imp.notes : "",
         formNotes: imp.formNotes || undefined,
         services: leadServices,
         serviceType: imp.preferredCountry || undefined,
@@ -1963,7 +1967,7 @@ export async function distributeImportedLeads(
       platform: imp.platform || undefined,
       stage: "Initial Contact",
       value: 0,
-      notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
+      notes: (imp.notes && !imp.notes.toLowerCase().startsWith("campaign:") && !imp.notes.toLowerCase().startsWith("imported via")) ? imp.notes : "",
       formNotes: imp.formNotes || undefined,
       services: leadServices,
       serviceType: imp.preferredCountry || undefined,
