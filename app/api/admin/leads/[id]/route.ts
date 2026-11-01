@@ -55,6 +55,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/
   if (assignedBranchName !== undefined) updates.assignedBranchName = typeof assignedBranchName === "string" ? assignedBranchName.trim() : "";
   if (state !== undefined) updates.state = typeof state === "string" ? state.trim() : "";
   if (neetStatus !== undefined) updates.neetStatus = typeof neetStatus === "string" ? neetStatus.trim() : "";
+  if (body?.platform !== undefined) (updates as any).platform = typeof body.platform === "string" ? body.platform.trim() : "";
   if (preferredCountry !== undefined) updates.preferredCountry = typeof preferredCountry === "string" ? preferredCountry.trim() : "";
   if (preferredUniversity1 !== undefined) updates.preferredUniversity1 = typeof preferredUniversity1 === "string" ? preferredUniversity1.trim() : "";
   if (preferredUniversity2 !== undefined) updates.preferredUniversity2 = typeof preferredUniversity2 === "string" ? preferredUniversity2.trim() : "";

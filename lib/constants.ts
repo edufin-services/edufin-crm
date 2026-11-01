@@ -6,7 +6,6 @@ export const COUNTRY_OPTIONS = [
   "Georgia",
   "Uzbekistan",
   "Nepal",
-  "Others",
 ] as const;
 export type CountryOption = (typeof COUNTRY_OPTIONS)[number];
 

@@ -62,7 +62,28 @@ function tableRowBg(color?: string) {
 }
 
 // ── Channel Icon Component ─────────────────────────────────────────────────────
-function ChannelIcon({ channel, className = "h-3.5 w-3.5" }: { channel: Channel; className?: string }) {
+function ChannelIcon({ channel, platform, className = "h-3.5 w-3.5" }: { channel?: Channel | string; platform?: string; className?: string }) {
+  const normPlatform = (platform || "").toLowerCase();
+  if (normPlatform === "fb" || normPlatform.includes("face") || channel === "Facebook") {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="12" fill="#1877F2" />
+        <path
+          d="M15.12 12.67l.46-3h-2.88V7.72c0-.82.4-1.62 1.69-1.62h1.31V3.54s-1.19-.2-2.33-.2c-2.37 0-3.92 1.44-3.92 4.04v2.29H6.81v3h2.62v7.26c.53.08 1.07.13 1.62.13s1.09-.05 1.62-.13v-7.26h2.45z"
+          fill="#FFFFFF"
+        />
+      </svg>
+    );
+  }
+  if (normPlatform === "ig" || normPlatform.includes("insta") || channel === "Instagram") {
+    return (
+      <svg className={`${className} text-pink-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+      </svg>
+    );
+  }
   switch (channel) {
     case "WhatsApp":
       return (
@@ -88,10 +109,28 @@ function ChannelIcon({ channel, className = "h-3.5 w-3.5" }: { channel: Channel;
           />
         </svg>
       );
+    case "Meta Ads":
+      return (
+        <svg className={`${className} text-[#0081FB]`} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+        </svg>
+      );
     case "Ads":
       return (
         <svg className={`${className} text-purple-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      );
+    case "Website":
+      return (
+        <svg className={`${className} text-sky-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      );
+    case "Google Sheets":
+      return (
+        <svg className={`${className} text-emerald-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>
         </svg>
       );
     case "Email":
@@ -109,6 +148,58 @@ function ChannelIcon({ channel, className = "h-3.5 w-3.5" }: { channel: Channel;
         </svg>
       );
   }
+}
+
+function LeadPlatformBadge({ channel, platform, isColored }: { channel?: Channel | string; platform?: string; isColored?: boolean }) {
+  const normPlat = (platform || "").toLowerCase();
+  const isFb = normPlat === "fb" || normPlat.includes("face") || channel === "Facebook";
+  const isIg = normPlat === "ig" || normPlat.includes("insta") || channel === "Instagram";
+
+  let label = channel || "Direct";
+  let theme = "bg-zinc-100 text-zinc-700 border-zinc-200";
+
+  if (isFb) {
+    label = platform === "fb" && channel === "Meta Ads" ? "Facebook (fb)" : "Facebook";
+    theme = "bg-blue-50 text-[#1877F2] border-blue-200";
+  } else if (isIg) {
+    label = platform === "ig" && channel === "Meta Ads" ? "Instagram (ig)" : "Instagram";
+    theme = "bg-pink-50 text-pink-700 border-pink-200";
+  } else if (channel === "WhatsApp") {
+    label = "WhatsApp";
+    theme = "bg-emerald-50 text-emerald-700 border-emerald-200";
+  } else if (channel === "Meta Ads") {
+    label = "Meta Ads";
+    theme = "bg-indigo-50 text-indigo-700 border-indigo-200";
+  } else if (channel === "Website") {
+    label = "Website";
+    theme = "bg-sky-50 text-sky-700 border-sky-200";
+  } else if (channel === "Google Sheets") {
+    label = "Sheets";
+    theme = "bg-emerald-50 text-emerald-700 border-emerald-200";
+  } else if (channel === "Email") {
+    label = "Email";
+    theme = "bg-sky-50 text-sky-700 border-sky-200";
+  } else if (channel === "Ads") {
+    label = "Ads";
+    theme = "bg-purple-50 text-purple-700 border-purple-200";
+  } else if (channel === "Referral/Others") {
+    label = "Referral";
+    theme = "bg-amber-50 text-amber-700 border-amber-200";
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold border shrink-0 ${
+        isColored
+          ? "bg-white text-zinc-900 border-white/60 shadow-2xs"
+          : theme
+      }`}
+      title={`Channel: ${channel || "N/A"}${platform ? ` · Platform: ${platform}` : ""}`}
+    >
+      <ChannelIcon channel={channel} platform={platform} className="h-3 w-3 shrink-0" />
+      <span>{label}</span>
+    </span>
+  );
 }
 
 // ── Avatar helpers ─────────────────────────────────────────────────────────────
@@ -571,7 +662,13 @@ function LeadsPageContent() {
       const matchStage = stageFilter === "All Stages" || l.stage === stageFilter;
 
       // 2. Channel Filter
-      const matchChannel = channelFilter === "All" || l.channel === channelFilter;
+      const normPlat = (l.platform || "").toLowerCase();
+      const matchChannel =
+        channelFilter === "All" ||
+        l.channel === channelFilter ||
+        (channelFilter === "Facebook" && (l.channel === "Facebook" || normPlat === "fb" || normPlat.includes("face"))) ||
+        (channelFilter === "Instagram" && (l.channel === "Instagram" || normPlat === "ig" || normPlat.includes("insta"))) ||
+        (channelFilter === "Meta Ads" && (l.channel === "Meta Ads" || normPlat === "fb" || normPlat === "ig"));
 
       // 3. Service Filter
       const activeServices = (l.services && l.services.length > 0 ? l.services : l.serviceType ? [l.serviceType] : [])
@@ -1062,11 +1159,13 @@ function LeadsPageContent() {
                       const remStatus = getReminderStatus(deal.reminderAt);
                       const locText = deal.city?.trim() || deal.state?.trim() || "";
 
-                      const displayServices = deal.preferredCountry
-                        ? [deal.preferredCountry]
-                        : deal.services && deal.services.length > 0
-                        ? deal.services
-                        : [];
+                      const displayServices = (
+                        deal.preferredCountry
+                          ? [deal.preferredCountry]
+                          : deal.services && deal.services.length > 0
+                          ? deal.services
+                          : []
+                      ).filter((svc) => Boolean(svc) && svc.trim().toLowerCase() !== "others");
 
                       return (
                         <div
@@ -1127,9 +1226,7 @@ function LeadsPageContent() {
                               </span>
                             )}
 
-                            <span className="inline-flex items-center justify-center shrink-0" title={deal.channel}>
-                              <ChannelIcon channel={deal.channel} className="h-3.5 w-3.5" />
-                            </span>
+                            <LeadPlatformBadge channel={deal.channel} platform={deal.platform} isColored={isColored} />
 
                             {displayServices.map((svc) => (
                               <span
@@ -1267,7 +1364,7 @@ function LeadsPageContent() {
                   <th className="px-5 py-3.5">Lead Name</th>
                   <th className="px-5 py-3.5">Services</th>
                   <th className="px-5 py-3.5">Stage</th>
-                  <th className="px-5 py-3.5 text-center">Channel</th>
+                  <th className="px-5 py-3.5 text-center">Platform / Channel</th>
                   <th className="px-5 py-3.5">Notes &amp; Reminder</th>
                   <th
                     className="px-5 py-3.5 cursor-pointer select-none hover:text-zinc-700 transition-colors"
@@ -1312,8 +1409,8 @@ function LeadsPageContent() {
                     const remStatus = getReminderStatus(deal.reminderAt);
                     const locText = deal.city?.trim() || deal.state?.trim() || "";
 
-                    const rawList = deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
-                    const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages");
+                    const rawList = deal.preferredCountry ? [deal.preferredCountry] : deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
+                    const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages" && s.trim().toLowerCase() !== "others");
                     const displayServices = filtered.length > 0 ? filtered : rawList.includes("Tours & Packages") ? ["Domestic Tours"] : [];
 
                     return (
@@ -1406,9 +1503,7 @@ function LeadsPageContent() {
                         {/* Channel */}
                         <td className="px-5 py-3.5 text-center">
                           <div className="flex items-center justify-center">
-                            <span className="inline-flex items-center justify-center shrink-0" title={deal.channel}>
-                              <ChannelIcon channel={deal.channel} className="h-4.5 w-4.5" />
-                            </span>
+                            <LeadPlatformBadge channel={deal.channel} platform={deal.platform} isColored={isColored} />
                           </div>
                         </td>
 

@@ -842,8 +842,14 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                             <p className="truncate text-xl font-black text-zinc-900 leading-tight group-hover:text-emerald-800 transition-colors">
                               {deal.name}
                             </p>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${channelPill[deal.channel] ?? "bg-zinc-50 text-zinc-600 border-zinc-200"}`}>
-                              {deal.channel}
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                              (deal.platform === "fb" || deal.channel === "Facebook")
+                                ? "bg-blue-50 text-[#1877F2] border-blue-200"
+                                : (deal.platform === "ig" || deal.channel === "Instagram")
+                                ? "bg-pink-50 text-pink-700 border-pink-200"
+                                : (channelPill[deal.channel] ?? "bg-zinc-50 text-zinc-600 border-zinc-200")
+                            }`}>
+                              {deal.platform === "fb" ? "Facebook (fb)" : deal.platform === "ig" ? "Instagram (ig)" : deal.channel}
                             </span>
                           </div>
 
@@ -868,11 +874,14 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
 
                           {/* Countries */}
                           {(() => {
-                            const displayList = deal.preferredCountry
+                            const rawList = deal.preferredCountry
                               ? [deal.preferredCountry]
                               : deal.services && deal.services.length > 0
                               ? deal.services
                               : [];
+                            const displayList = rawList.filter(
+                              (svc) => Boolean(svc) && svc.trim().toLowerCase() !== "others"
+                            );
                             if (displayList.length === 0) return null;
                             return (
                               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1031,8 +1040,8 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                       <td className="px-5 py-3.5">
                         <div className="flex flex-wrap gap-1 max-w-[220px]">
                           {(() => {
-                            const rawList = deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
-                            const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages");
+                            const rawList = deal.preferredCountry ? [deal.preferredCountry] : deal.services && deal.services.length > 0 ? deal.services : deal.serviceType ? [deal.serviceType] : [];
+                            const filtered = rawList.filter((s) => Boolean(s) && s !== "Tours & Packages" && s.trim().toLowerCase() !== "others");
                             const displayList = filtered.length > 0 ? filtered : rawList.includes("Tours & Packages") ? ["Domestic Tours"] : [];
                             if (displayList.length === 0) {
                               return <span className="text-zinc-300 text-xs">—</span>;
@@ -1068,8 +1077,14 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
 
                       {/* Channel */}
                       <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-bold ${channelPill[deal.channel] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>
-                          {deal.channel}
+                        <span className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-bold ${
+                          (deal.platform === "fb" || deal.channel === "Facebook")
+                            ? "bg-blue-50 text-[#1877F2] border-blue-200"
+                            : (deal.platform === "ig" || deal.channel === "Instagram")
+                            ? "bg-pink-50 text-pink-700 border-pink-200"
+                            : (channelPill[deal.channel] ?? "bg-zinc-100 text-zinc-600 border-zinc-200")
+                        }`}>
+                          {deal.platform === "fb" ? "Facebook (fb)" : deal.platform === "ig" ? "Instagram (ig)" : deal.channel}
                         </span>
                       </td>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createLead, getNextRoundRobinUser } from "@/lib/db";
 import { AdminSettingsModel, LeadModel } from "@/lib/models";
 import { dbConnect } from "@/lib/mongoose";
+import { detectCountry } from "@/lib/lead-parser";
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
@@ -9,10 +10,6 @@ const INDIAN_STATES = [
   "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
   "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
   "West Bengal", "Delhi", "Delhi NCR", "Jammu and Kashmir", "Ladakh", "Chandigarh"
-];
-
-const COUNTRY_CANDIDATES = [
-  "Russia", "China", "Kazakhstan", "Kyrgyzstan", "Georgia", "Uzbekistan", "Nepal"
 ];
 
 // ── GET: Webhook Verification Endpoint for Meta ──────────────────────────────
@@ -84,15 +81,6 @@ function detectIndianState(text: string): string {
   return "";
 }
 
-// Helper to deduce preferred country from text
-function detectCountry(text: string): string {
-  const lower = text.toLowerCase();
-  for (const c of COUNTRY_CANDIDATES) {
-    if (lower.includes(c.toLowerCase())) return c;
-  }
-  return "";
-}
-
 // ── POST: Receive Real-Time Lead from Meta Lead Ads ─────────────────────────
 export async function POST(request: NextRequest) {
   try {
@@ -142,8 +130,16 @@ export async function POST(request: NextRequest) {
       const assignedOwnerName = assignedUser?.name || "Admin";
 
       const leadState = body.state || detectIndianState(`${body.campaign || ""} ${body.adset || ""} ${body.city || ""}`) || "";
-      const leadCountry = body.preferredCountry || detectCountry(`${body.notes || ""} ${body.campaign || ""}`) || "";
+      const leadCountry = (body.preferredCountry && body.preferredCountry.toLowerCase() !== "others")
+        ? body.preferredCountry
+        : detectCountry(`${body.notes || ""} ${body.campaign || ""}`) || "";
       const campaignName = body.campaign || "State-wise";
+      const rawSimPlatform = String(body.platform || "").trim().toLowerCase();
+      const simPlatform = (rawSimPlatform === "fb" || rawSimPlatform.includes("face"))
+        ? "fb"
+        : (rawSimPlatform === "ig" || rawSimPlatform.includes("insta"))
+        ? "ig"
+        : rawSimPlatform;
 
       const created = await createLead({
         ownerId: assignedOwnerId,
@@ -156,12 +152,13 @@ export async function POST(request: NextRequest) {
         neetStatus: body.neetStatus || undefined,
         preferredCountry: leadCountry || undefined,
         channel: "Meta Ads",
+        platform: simPlatform || undefined,
         stage: "Initial Contact",
         value: 0,
-        notes: `Campaign: ${campaignName}${body.adset ? ` · AdSet: ${body.adset}` : ""}`,
+        notes: `Campaign: ${campaignName}${body.adset ? ` · AdSet: ${body.adset}` : ""}${simPlatform ? ` · Platform: ${simPlatform === "fb" ? "Facebook" : simPlatform === "ig" ? "Instagram" : simPlatform}` : ""}`,
         formNotes: body.formNotes || (leadState ? `• State: ${leadState}` : ""),
-        services: leadCountry ? [leadCountry] : ["Others"],
-        serviceType: leadCountry || "Others",
+        services: leadCountry ? [leadCountry] : [],
+        serviceType: leadCountry || undefined,
       });
 
       return NextResponse.json({
@@ -211,7 +208,7 @@ export async function POST(request: NextRequest) {
 
         try {
           const graphRes = await fetch(
-            `https://graph.facebook.com/v21.0/${leadgenId}?fields=id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data&access_token=${pageAccessToken}`,
+            `https://graph.facebook.com/v21.0/${leadgenId}?fields=id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,is_organic,platform,field_data&access_token=${pageAccessToken}`,
             { signal: AbortSignal.timeout(10000) }
           );
           leadData = await graphRes.json().catch(() => null);
@@ -345,11 +342,24 @@ export async function POST(request: NextRequest) {
           "study_destination",
           "which_country",
         ]);
+        if (leadPreferredCountry && leadPreferredCountry.trim().toLowerCase() === "others") {
+          leadPreferredCountry = "";
+        }
 
         const extractedPlatform = extractMetaField(fieldData, [
           "platform",
           "source",
         ]);
+
+        const rawPlatform = String(leadData?.platform || extractedPlatform || "").trim().toLowerCase();
+        let leadPlatform = "";
+        if (rawPlatform === "fb" || rawPlatform.includes("facebook")) {
+          leadPlatform = "fb";
+        } else if (rawPlatform === "ig" || rawPlatform.includes("instagram")) {
+          leadPlatform = "ig";
+        } else if (rawPlatform) {
+          leadPlatform = rawPlatform;
+        }
 
         const extraFormFields: string[] = [];
 
@@ -389,7 +399,10 @@ export async function POST(request: NextRequest) {
 
         // Deduce preferred country if not explicitly in form
         if (!leadPreferredCountry) {
-          leadPreferredCountry = detectCountry(`${campaignName} ${adsetName} ${adName} ${extraFormFields.join(" ")}`);
+          const detected = detectCountry(`${campaignName} ${adsetName} ${adName} ${extraFormFields.join(" ")}`);
+          if (detected && detected.trim().toLowerCase() !== "others") {
+            leadPreferredCountry = detected;
+          }
         }
 
         // Clean phone number
@@ -441,6 +454,7 @@ export async function POST(request: NextRequest) {
 
         // Format lead form notes
         const formNotesLines: string[] = [];
+        if (leadPlatform) formNotesLines.push(`• Platform: ${leadPlatform === "fb" ? "Facebook (fb)" : leadPlatform === "ig" ? "Instagram (ig)" : leadPlatform}`);
         if (leadState) formNotesLines.push(`• State: ${leadState}`);
         if (leadCity) formNotesLines.push(`• City: ${leadCity}`);
         if (leadNeetStatus) formNotesLines.push(`• NEET Status: ${leadNeetStatus}`);
@@ -448,7 +462,7 @@ export async function POST(request: NextRequest) {
         if (extraFormFields.length > 0) formNotesLines.push(...extraFormFields.map((f) => `• ${f}`));
 
         const formAnswers = formNotesLines.join("\n");
-        const leadServices = leadPreferredCountry ? [leadPreferredCountry] : ["Others"];
+        const leadServices = leadPreferredCountry ? [leadPreferredCountry] : [];
 
         // Create lead in CRM Initial Stage
         const created = await createLead({
@@ -462,12 +476,13 @@ export async function POST(request: NextRequest) {
           neetStatus: leadNeetStatus || undefined,
           preferredCountry: leadPreferredCountry || undefined,
           channel: "Meta Ads",
+          platform: leadPlatform || undefined,
           stage: "Initial Contact",
           value: 0,
-          notes: `Campaign: ${campaignName || "State-wise"}${adsetName ? ` · AdSet: ${adsetName}` : ""}${adName ? ` · Ad: ${adName}` : ""}`,
+          notes: `Campaign: ${campaignName || "State-wise"}${adsetName ? ` · AdSet: ${adsetName}` : ""}${adName ? ` · Ad: ${adName}` : ""}${leadPlatform ? ` · Platform: ${leadPlatform === "fb" ? "Facebook" : leadPlatform === "ig" ? "Instagram" : leadPlatform}` : ""}`,
           formNotes: formAnswers,
           services: leadServices,
-          serviceType: leadServices[0],
+          serviceType: leadServices[0] || undefined,
         });
 
         results.push({

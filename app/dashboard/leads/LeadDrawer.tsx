@@ -12,6 +12,7 @@ export type DrawerLead = {
   id: string;
   name: string;
   channel: Channel;
+  platform?: string;
   stage: Stage;
   createdAt: string;
   ownerId?: string;
@@ -467,7 +468,11 @@ export default function LeadDrawer({
   const [city, setCity] = useState(lead.city ?? "");
   const [state, setState] = useState(lead.state ?? "");
   const [neetStatus, setNeetStatus] = useState(lead.neetStatus ?? "");
-  const [preferredCountry, setPreferredCountry] = useState(lead.preferredCountry ?? "");
+  const [preferredCountry, setPreferredCountry] = useState(
+    (lead.preferredCountry && lead.preferredCountry.trim().toLowerCase() !== "others")
+      ? lead.preferredCountry
+      : ""
+  );
   const [preferredUniversity1, setPreferredUniversity1] = useState(lead.preferredUniversity1 ?? "");
   const [preferredUniversity2, setPreferredUniversity2] = useState(lead.preferredUniversity2 ?? "");
   
@@ -493,8 +498,11 @@ export default function LeadDrawer({
   const [color, setColor] = useState(lead.color ?? "");
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
-    if (lead.preferredCountry) return [lead.preferredCountry];
-    if (lead.services && lead.services.length > 0) return lead.services;
+    if (lead.preferredCountry && lead.preferredCountry.trim().toLowerCase() !== "others") return [lead.preferredCountry];
+    if (lead.services && lead.services.length > 0) {
+      const valid = lead.services.filter((s) => s && s.trim().toLowerCase() !== "others");
+      if (valid.length > 0) return valid;
+    }
     return [];
   });
   const [stage, setStage] = useState<Stage>(lead.stage);
@@ -742,9 +750,13 @@ export default function LeadDrawer({
 
     const effectiveOwnerId = assignAgentId || lead.ownerId || "";
 
+    const cleanCountry = (preferredCountry || selectedServices[0] || "").trim();
+    const finalCountry = cleanCountry.toLowerCase() === "others" ? "" : cleanCountry;
+    const cleanServices = selectedServices.filter((s) => s && s.trim().toLowerCase() !== "others");
+
     const result = await onSubmit({
-      name, stage, email, secondaryEmail, phone, color, notes, services: selectedServices,
-      city, state, neetStatus, preferredCountry: preferredCountry || selectedServices[0] || "", preferredUniversity1, preferredUniversity2,
+      name, stage, email, secondaryEmail, phone, color, notes, services: cleanServices,
+      city, state, neetStatus, preferredCountry: finalCountry, preferredUniversity1, preferredUniversity2,
       assignAgent: assignAgentName,
       ownerId: effectiveOwnerId,
       firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
@@ -882,6 +894,7 @@ export default function LeadDrawer({
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10.5px] font-bold text-zinc-700">
                     {lead.channel}
+                    {lead.platform ? ` · ${lead.platform === "fb" ? "Facebook (fb)" : lead.platform === "ig" ? "Instagram (ig)" : lead.platform.toUpperCase()}` : ""}
                   </span>
                   {!isAtFinalStage && (
                     <span className="text-[11px] font-extrabold text-emerald-600">{progressPct}%</span>
@@ -1108,7 +1121,7 @@ export default function LeadDrawer({
                   className={selectCls}
                 >
                   <option value="">Select Preferred Country</option>
-                  {COUNTRY_OPTIONS.map((c) => (
+                  {COUNTRY_OPTIONS.filter((c) => c.toLowerCase() !== "others").map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -1525,6 +1538,7 @@ export default function LeadDrawer({
                 {[
                   { label: "Created", value: formatRelativeTime(lead.createdAt) },
                   { label: "Channel", value: lead.channel },
+                  ...(lead.platform ? [{ label: "Platform", value: lead.platform === "fb" ? "Facebook (fb)" : lead.platform === "ig" ? "Instagram (ig)" : lead.platform.toUpperCase() }] : []),
                   { label: "ID", value: lead.id.slice(0, 8).toUpperCase() },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-zinc-100">

@@ -55,6 +55,7 @@ const LeadSchema = new Schema({
   ownerId: { type: String, required: true, index: true },
   name: { type: String, required: true },
   channel: { type: String, required: true },
+  platform: { type: String, default: "" },
   value: { type: Number, required: true },
   stage: { type: String, required: true },
   createdAt: { type: String, required: true },

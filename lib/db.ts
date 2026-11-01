@@ -66,6 +66,7 @@ export type Lead = {
   ownerId: string;
   name: string;
   channel: Channel;
+  platform?: string;
   value: number;
   stage: Stage;
   createdAt: string;
@@ -728,7 +729,7 @@ export async function updateLead(
   id: string,
   ownerId: string,
   updates: Partial<Pick<Lead,
-    "stage" | "value" | "name" | "channel" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
+    "stage" | "value" | "name" | "channel" | "platform" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" | "ownerId" |
     "assignedBranchId" | "assignedBranchName" |
     "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
@@ -831,7 +832,7 @@ export async function getLeadByIdAdmin(id: string): Promise<Lead | undefined> {
 export async function updateLeadAdmin(
   id: string,
   updates: Partial<Pick<Lead,
-    "ownerId" | "stage" | "value" | "name" | "channel" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
+    "ownerId" | "stage" | "value" | "name" | "channel" | "platform" | "email" | "secondaryEmail" | "phone" | "color" | "notes" | "formNotes" |
     "city" | "state" | "neetStatus" | "preferredCountry" | "preferredUniversity1" | "preferredUniversity2" | "assignAgent" |
     "assignedBranchId" | "assignedBranchName" |
     "firstPayment" | "secondPayment" | "thirdPaymentAmount" | "otcAmount" | "totalServiceCharge" | "tuitionFee" | "hostelFee" |
@@ -1818,6 +1819,7 @@ export async function assignImportedLead(
       neetStatus: imp.neetStatus || undefined,
       preferredCountry: imp.preferredCountry || undefined,
       channel: (imp.channel as Channel) || "Facebook",
+      platform: imp.platform || undefined,
       stage: "Initial Contact",
       value: 0,
       notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
@@ -1902,6 +1904,7 @@ export async function bulkAssignImportedLeads(
         neetStatus: imp.neetStatus || undefined,
         preferredCountry: imp.preferredCountry || undefined,
         channel: (imp.channel as Channel) || "Facebook",
+        platform: imp.platform || undefined,
         stage: "Initial Contact",
         value: 0,
         notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,
@@ -1957,6 +1960,7 @@ export async function distributeImportedLeads(
       neetStatus: imp.neetStatus || undefined,
       preferredCountry: imp.preferredCountry || undefined,
       channel: (imp.channel as Channel) || "Facebook",
+      platform: imp.platform || undefined,
       stage: "Initial Contact",
       value: 0,
       notes: imp.notes || `Imported via Admin Upload · Platform: ${imp.platform || "N/A"}`,

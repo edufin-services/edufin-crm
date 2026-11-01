@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!ownerId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const {
-    name, channel, stage, phone, services, notes, email, value, city, state,
+    name, channel, platform, stage, phone, services, notes, email, value, city, state,
     neetStatus, preferredCountry, preferredUniversity1, preferredUniversity2,
     assignAgent, firstPayment, secondPayment, thirdPaymentAmount, otcAmount, totalServiceCharge,
   } = body ?? {};
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     ownerId,
     name: name.trim(),
     channel,
+    platform: typeof platform === "string" ? platform.trim() : undefined,
     value: typeof value === "number" && value >= 0 ? value : 0,
     stage: normStage,
     phone: cleanPhone,
