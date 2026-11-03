@@ -1032,35 +1032,28 @@ export default function LeadDrawer({
           {/* ── MAIN TAB ──────────────────────────────────────────────────── */}
           {activeTab === "main" && (
             <div className="pb-4">
-              {/* ── Customer Form Answers Section (Placed directly above Notes) ── */}
+              {/* ── Compact Customer Form Answers (Matches ViewNoteModal popup) ── */}
               {customerFormAnswers.length > 0 && (
-                <>
-                  <SectionHeader
-                    label="Customer Form Answers"
-                    icon={
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
-                        <polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                      </svg>
-                    }
-                  />
-                  <div className="px-5 py-2">
-                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-2xs">
-                      <div className="divide-y divide-indigo-100/70 text-xs">
-                        {customerFormAnswers.map((ans, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-start justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
-                          >
-                            <span className="font-semibold text-zinc-600 text-xs">{ans.q}:</span>
-                            <span className="font-extrabold text-zinc-900 text-right text-xs max-w-[65%] break-words">
-                              {ans.a || "—"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                <div className="px-5 pt-3 pb-1">
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 px-3.5 py-2.5 shadow-2xs">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-800 block mb-1.5">
+                      Customer Form Answers
+                    </span>
+                    <div className="divide-y divide-indigo-100/60 text-xs">
+                      {customerFormAnswers.map((ans, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between gap-3 py-1 first:pt-0 last:pb-0"
+                        >
+                          <span className="font-semibold text-zinc-600 text-[11.5px]">{ans.q}:</span>
+                          <span className="font-extrabold text-zinc-900 text-right text-[11.5px] max-w-[65%] break-words">
+                            {ans.a || "—"}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
               <SectionHeader
