@@ -146,7 +146,7 @@ export function getNoteStatus(notes?: string | null, formNotes?: string | null):
 /**
  * Formats question keys nicely (e.g. "when_are_you_planning_to_travel?" -> "When Are You Planning To Travel?")
  */
-function formatQuestionKey(key: string): string {
+export function formatQuestionKey(key: string): string {
   return key
     .replace(/^[•\s*-]+/, "")
     .replace(/[?:]+$/, "")
@@ -155,7 +155,7 @@ function formatQuestionKey(key: string): string {
     .trim();
 }
 
-function formatAnswerVal(val: string): string {
+export function formatAnswerVal(val: string): string {
   const trimmed = val.trim();
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;

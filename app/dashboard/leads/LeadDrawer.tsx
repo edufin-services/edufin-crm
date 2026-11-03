@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, type Channel, type Stage } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import SetReminderModal from "./SetReminderModal";
+import { extractFormAndUserNotes, formatQuestionKey, formatAnswerVal } from "./ViewNoteModal";
 
 export type LeadDocument = { name: string; url: string; uploadedAt: string };
 
@@ -498,23 +499,74 @@ export default function LeadDrawer({
       }
     }
   }, [currentUserId, assignAgentId, lead.ownerId, lead.assignAgent, teamMembers]);
+
+  const { formNoteText, userNoteText } = useMemo(
+    () => extractFormAndUserNotes(lead.notes, lead.formNotes),
+    [lead.notes, lead.formNotes]
+  );
+
+  const customerFormAnswers = useMemo(() => {
+    if (!formNoteText) return [];
+
+    const list: Array<{ q: string; a: string }> = [];
+    const lines = formNoteText.split("\n");
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      if (line.includes(":")) {
+        const clean = line.replace(/^[•\s*-]+/, "").trim();
+        const colonIdx = clean.indexOf(":");
+        const qRaw = clean.slice(0, colonIdx);
+        const aRaw = clean.slice(colonIdx + 1);
+
+        const qNorm = qRaw.toLowerCase().replace(/[\s_-]+/g, "");
+        const aLower = aRaw.toLowerCase();
+
+        // Discard any inbox link/url, facebook thread links, and file/sheet names
+        if (
+          qNorm.includes("inbox") ||
+          qNorm.includes("thread") ||
+          qNorm.includes("file") ||
+          qNorm.includes("sheet") ||
+          aLower.includes("business.facebook.com") ||
+          aLower.includes("facebook.com/latest") ||
+          aLower.includes("nav_ref=thread_view") ||
+          aLower.includes(".xls") ||
+          aLower.includes(".xlsx") ||
+          aLower.includes(".csv")
+        ) {
+          continue;
+        }
+
+        const q = formatQuestionKey(qRaw);
+        const a = formatAnswerVal(aRaw);
+        if (q) {
+          list.push({ q, a: a || "—" });
+        }
+      } else {
+        const clean = line.replace(/^[•\s*-]+/, "").trim();
+        const cleanLower = clean.toLowerCase();
+        if (
+          cleanLower.includes("inbox") ||
+          cleanLower.includes("business.facebook.com") ||
+          cleanLower.includes("thread_view")
+        ) {
+          continue;
+        }
+        if (clean) {
+          list.push({ q: clean, a: "" });
+        }
+      }
+    }
+
+    return list;
+  }, [formNoteText]);
+
   // Pipeline fields
   const [color, setColor] = useState(lead.color ?? "");
-  const [notes, setNotes] = useState(() => {
-    const raw = lead.notes ?? "";
-    const lower = raw.trim().toLowerCase();
-    if (
-      lower.startsWith("campaign:") ||
-      lower.startsWith("adset:") ||
-      lower.startsWith("ad:") ||
-      lower.startsWith("imported via") ||
-      lower.includes("· adset:") ||
-      lower.includes("· ad:")
-    ) {
-      return "";
-    }
-    return raw;
-  });
+  const [notes, setNotes] = useState(() => userNoteText);
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
     if (lead.preferredCountry && lead.preferredCountry.trim().toLowerCase() !== "others") return [lead.preferredCountry];
     if (lead.services && lead.services.length > 0) {
@@ -980,7 +1032,38 @@ export default function LeadDrawer({
           {/* ── MAIN TAB ──────────────────────────────────────────────────── */}
           {activeTab === "main" && (
             <div className="pb-4">
-                            <SectionHeader
+              {/* ── Customer Form Answers Section (Placed directly above Notes) ── */}
+              {customerFormAnswers.length > 0 && (
+                <>
+                  <SectionHeader
+                    label="Customer Form Answers"
+                    icon={
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
+                        <polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
+                    }
+                  />
+                  <div className="px-5 py-2">
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-2xs">
+                      <div className="divide-y divide-indigo-100/70 text-xs">
+                        {customerFormAnswers.map((ans, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+                          >
+                            <span className="font-semibold text-zinc-600 text-xs">{ans.q}:</span>
+                            <span className="font-extrabold text-zinc-900 text-right text-xs max-w-[65%] break-words">
+                              {ans.a || "—"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <SectionHeader
                 label="Notes"
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
@@ -1438,79 +1521,6 @@ export default function LeadDrawer({
               <ArrayDocRow label="3rd Payment invoice upload" docs={thirdPaymentInvoices} uploading={uploadingThirdPaymentInvoice} inputRef={thirdPaymentInvoiceInputRef} onUpload={handleUploadThirdPaymentInvoice} onDelete={handleDeleteThirdPaymentInvoice} />
               <ArrayDocRow label="Visa upload" docs={visaDocuments} uploading={uploadingVisaDoc} inputRef={visaDocInputRef} onUpload={handleUploadVisaDoc} onDelete={handleDeleteVisaDoc} />
               <ArrayDocRow label="General Documents" docs={documents} uploading={uploadingDoc} inputRef={docInputRef} onUpload={handleUploadDoc} onDelete={handleDeleteDoc} />
-
-              {(() => {
-                const cleanedLines = lead.formNotes
-                  ? lead.formNotes
-                      .split("\n")
-                      .map((l) => l.trim())
-                      .filter((t) => {
-                        const lower = t.toLowerCase().replace(/^[•\s*-]+/, "").trim();
-                        return (
-                          t &&
-                          !t.startsWith("🎯") &&
-                          !t.startsWith("📌") &&
-                          !t.startsWith("📢") &&
-                          !t.startsWith("👤") &&
-                          !lower.startsWith("campaign:") &&
-                          !lower.startsWith("adset:") &&
-                          !lower.startsWith("ad:") &&
-                          !lower.startsWith("assigned:") &&
-                          !lower.startsWith("form id:") &&
-                          !lower.includes("leadgen id:") &&
-                          !lower.startsWith("meta lead ads") &&
-                          !lower.startsWith("📋 form answers:") &&
-                          !lower.startsWith("file:") &&
-                          !lower.startsWith("filename:") &&
-                          !lower.startsWith("file name:") &&
-                          !lower.startsWith("source file:") &&
-                          !lower.startsWith("sheet:") &&
-                          !lower.includes(".xls") &&
-                          !lower.includes(".xlsx") &&
-                          !lower.includes(".csv") &&
-                          !lower.startsWith("inbox") &&
-                          !lower.includes("inbox_url") &&
-                          !lower.includes("business.facebook.com") &&
-                          !lower.includes("nav_ref=thread_view")
-                        );
-                      })
-                      .map((line) => {
-                        const clean = line.replace(/^[•\s*-]+/, "").trim();
-                        if (!clean.includes(":")) {
-                          return `• ${clean.replace(/_/g, " ")}`;
-                        }
-                        const colonIdx = clean.indexOf(":");
-                        const qRaw = clean.slice(0, colonIdx);
-                        const aRaw = clean.slice(colonIdx + 1);
-                        const qClean = qRaw.replace(/_/g, " ").replace(/[?:]+$/, "").trim();
-                        const aClean = aRaw.replace(/_/g, " ").trim();
-                        const qFormatted = qClean ? qClean.charAt(0).toUpperCase() + qClean.slice(1) : "";
-                        return `• ${qFormatted}?: ${aClean}`;
-                      })
-                  : [];
-
-                if (cleanedLines.length === 0) return null;
-
-                return (
-                  <>
-                    <SectionHeader
-                      label="Customer Form Answers"
-                      icon={
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400">
-                          <polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                        </svg>
-                      }
-                    />
-                    <div className="px-5 py-2">
-                      <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5 text-xs text-zinc-800 font-sans leading-relaxed shadow-2xs space-y-1.5">
-                        {cleanedLines.map((line, i) => (
-                          <p key={i}>{line}</p>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
             </div>
           )}
 
