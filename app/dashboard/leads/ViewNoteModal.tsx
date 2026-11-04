@@ -160,10 +160,20 @@ export function formatAnswerVal(val: string): string {
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
-  return trimmed
+  const formatted = trimmed
     .replace(/[_]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
+
+  // Strip (fb) or (ig) suffixes: user requested only "Facebook" or "Instagram"
+  if (/^facebook(\s*\(fb\))?$/i.test(formatted) || formatted.toLowerCase() === "fb") {
+    return "Facebook";
+  }
+  if (/^instagram(\s*\(ig\))?$/i.test(formatted) || formatted.toLowerCase() === "ig") {
+    return "Instagram";
+  }
+
+  return formatted;
 }
 
 export default function ViewNoteModal({

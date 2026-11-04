@@ -37,7 +37,7 @@ export default async function AdminDashboardPage() {
   const effectiveRevenue = totalRevenue > 0 ? totalRevenue : totalDealValue;
   const activeInPipeline = leads.filter((l) => {
     const s = normalizeStage(l.stage);
-    return s !== "Visa Process";
+    return s !== "Visa Process" && s !== "Trash";
   }).length;
 
   // Leads per user owner

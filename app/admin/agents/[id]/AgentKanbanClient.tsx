@@ -365,11 +365,20 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
     if (!leadToDelete) return;
     setIsDeleting(true);
     const { id } = leadToDelete;
+    const existing = leads.find((l) => l.id === id);
+    const isAlreadyTrash = existing?.stage === "Trash";
     try {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      if (editingLead?.id === id) setEditingLead(null);
-      await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
-      setLeadToDelete(null);
+      if (isAlreadyTrash) {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+        if (editingLead?.id === id) setEditingLead(null);
+        setLeadToDelete(null);
+        await fetch(`/api/admin/leads/${id}?permanent=true`, { method: "DELETE" });
+      } else {
+        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, stage: "Trash" } : l)));
+        if (editingLead?.id === id) setEditingLead((prev) => (prev ? { ...prev, stage: "Trash" } : null));
+        setLeadToDelete(null);
+        await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -849,7 +858,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                                 ? "bg-pink-50 text-pink-700 border-pink-200"
                                 : (channelPill[deal.channel] ?? "bg-zinc-50 text-zinc-600 border-zinc-200")
                             }`}>
-                              {deal.platform === "fb" ? "Facebook (fb)" : deal.platform === "ig" ? "Instagram (ig)" : deal.channel}
+                              {deal.platform === "fb" ? "Facebook" : deal.platform === "ig" ? "Instagram" : deal.channel}
                             </span>
                           </div>
 
@@ -930,7 +939,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                             </button>
 
-                            {nextStage ? (
+                            {nextStage && nextStage !== "Trash" ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); triggerStageChange(deal.id, nextStage); }}
                                 className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition-all shadow-xs hover:shadow-md bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -944,6 +953,14 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 Won
                               </span>
+                            ) : stage === "Trash" ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); triggerStageChange(deal.id, "Initial Contact"); }}
+                                className="flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 shadow-2xs transition-all active:scale-95 whitespace-nowrap"
+                                title="Restore to Initial Contact"
+                              >
+                                <span>Restore ↺</span>
+                              </button>
                             ) : (
                               <span className="flex items-center gap-1.5 rounded-xl bg-zinc-100 border border-zinc-200 px-3 py-1.5 text-xs font-bold text-zinc-600">
                                 Final
@@ -957,13 +974,15 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                 </div>
 
                 {/* Add Lead button matching screenshot */}
-                <button
-                  onClick={() => setModalStage(stage)}
-                  className="mt-3 flex-none flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-2.5 text-xs font-bold text-zinc-600 hover:bg-zinc-50 shadow-2xs transition-all"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>
-                  Add Lead
-                </button>
+                {stage !== "Trash" && (
+                  <button
+                    onClick={() => setModalStage(stage)}
+                    className="mt-3 flex-none flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-2.5 text-xs font-bold text-zinc-600 hover:bg-zinc-50 shadow-2xs transition-all"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>
+                    Add Lead
+                  </button>
+                )}
               </div>
             );
           })}
@@ -1084,7 +1103,7 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
                             ? "bg-pink-50 text-pink-700 border-pink-200"
                             : (channelPill[deal.channel] ?? "bg-zinc-100 text-zinc-600 border-zinc-200")
                         }`}>
-                          {deal.platform === "fb" ? "Facebook (fb)" : deal.platform === "ig" ? "Instagram (ig)" : deal.channel}
+                          {deal.platform === "fb" ? "Facebook" : deal.platform === "ig" ? "Instagram" : deal.channel}
                         </span>
                       </td>
 
@@ -1321,10 +1340,14 @@ export default function AgentKanbanClient({ agent, initialLeads }: { agent: Agen
       {/* ── Delete Confirmation Modal ─────────────────────────────────────── */}
       <ConfirmModal
         isOpen={Boolean(leadToDelete)}
-        title="Move Lead to Trash?"
-        description="Are you sure you want to move this enquiry to trash? You can review or restore it at any time from the Trash tab."
-        confirmLabel="Move to Trash"
-        cancelLabel="Keep Lead"
+        title={leadToDelete && leads.find((l) => l.id === leadToDelete.id)?.stage === "Trash" ? "Permanently Delete Lead?" : "Move Lead to Trash?"}
+        description={
+          leadToDelete && leads.find((l) => l.id === leadToDelete.id)?.stage === "Trash"
+            ? "Are you sure you want to permanently delete this lead? This cannot be undone."
+            : "Are you sure you want to move this enquiry to trash? You can review or restore it at any time from the Trash column."
+        }
+        confirmLabel={leadToDelete && leads.find((l) => l.id === leadToDelete.id)?.stage === "Trash" ? "Delete Permanently" : "Move to Trash"}
+        cancelLabel="Cancel"
         variant="danger"
         leadName={leadToDelete?.name}
         isLoading={isDeleting}

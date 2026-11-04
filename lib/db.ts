@@ -612,22 +612,32 @@ export async function deleteUser(id: string): Promise<boolean> {
   return (res.deletedCount ?? 0) > 0;
 }
 
-export async function getAllLeads(): Promise<Lead[]> {
+export async function getAllLeads(includeDeleted: boolean = true): Promise<Lead[]> {
   await dbConnect();
-  const docs = await LeadModel.find({ deletedAt: null }).sort({ createdAt: -1 }).lean();
+  const filter = includeDeleted ? {} : { deletedAt: null };
+  const docs = await LeadModel.find(filter).sort({ createdAt: -1 }).lean();
   return docs.map((d) => {
     const l = toPlain<Lead>(d);
-    l.stage = normalizeStage(l.stage);
+    if (l.deletedAt) {
+      l.stage = "Trash";
+    } else {
+      l.stage = normalizeStage(l.stage);
+    }
     return l;
   });
 }
 
-export async function getLeadsByOwner(ownerId: string): Promise<Lead[]> {
+export async function getLeadsByOwner(ownerId: string, includeDeleted: boolean = true): Promise<Lead[]> {
   await dbConnect();
-  const docs = await LeadModel.find({ ownerId, deletedAt: null }).sort({ createdAt: -1 }).lean();
+  const filter = includeDeleted ? { ownerId } : { ownerId, deletedAt: null };
+  const docs = await LeadModel.find(filter).sort({ createdAt: -1 }).lean();
   return docs.map((d) => {
     const l = toPlain<Lead>(d);
-    l.stage = normalizeStage(l.stage);
+    if (l.deletedAt) {
+      l.stage = "Trash";
+    } else {
+      l.stage = normalizeStage(l.stage);
+    }
     return l;
   });
 }
@@ -746,6 +756,11 @@ export async function updateLead(
 
   const now = new Date().toISOString();
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
+  if (updates.stage === "Trash") {
+    setUpdates.deletedAt = now;
+  } else if (updates.stage && updates.stage !== "Trash" && prev?.deletedAt) {
+    setUpdates.deletedAt = null;
+  }
   if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
     setUpdates.confirmedAt = now;
   }
@@ -802,11 +817,23 @@ export async function updateLead(
   return updated;
 }
 
+export async function permanentlyDeleteLead(id: string, ownerId: string): Promise<boolean> {
+  await dbConnect();
+  const res = await LeadModel.deleteOne({ id, ownerId });
+  return (res.deletedCount ?? 0) > 0;
+}
+
+export async function permanentlyDeleteLeadAdmin(id: string): Promise<boolean> {
+  await dbConnect();
+  const res = await LeadModel.deleteOne({ id });
+  return (res.deletedCount ?? 0) > 0;
+}
+
 export async function deleteLead(id: string, ownerId: string): Promise<void> {
   await dbConnect();
   const doc = await LeadModel.findOneAndUpdate(
     { id, ownerId },
-    { $set: { deletedAt: new Date().toISOString(), stage: "Closed" } },
+    { $set: { deletedAt: new Date().toISOString(), stage: "Trash" } },
     { returnDocument: "after" }
   );
   if (doc) {
@@ -818,8 +845,8 @@ export async function deleteLead(id: string, ownerId: string): Promise<void> {
       channel: l.channel,
       ownerId: l.ownerId,
       previousStage: l.stage,
-      newStage: "Closed",
-      details: `Lead deleted / closed`,
+      newStage: "Trash",
+      details: `Lead moved to trash`,
     }).catch((err) => console.error("[audit] deleteLead log error:", err));
   }
 }
@@ -849,6 +876,11 @@ export async function updateLeadAdmin(
 
   const now = new Date().toISOString();
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
+  if (updates.stage === "Trash") {
+    setUpdates.deletedAt = now;
+  } else if (updates.stage && updates.stage !== "Trash" && prev?.deletedAt) {
+    setUpdates.deletedAt = null;
+  }
   if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
     setUpdates.confirmedAt = now;
   }
@@ -909,7 +941,7 @@ export async function deleteLeadAdmin(id: string): Promise<Lead | undefined> {
   await dbConnect();
   const doc = await LeadModel.findOneAndUpdate(
     { id },
-    { $set: { deletedAt: new Date().toISOString(), stage: "Closed" } },
+    { $set: { deletedAt: new Date().toISOString(), stage: "Trash" } },
     { returnDocument: "after" }
   );
   if (doc) {
@@ -921,8 +953,8 @@ export async function deleteLeadAdmin(id: string): Promise<Lead | undefined> {
       channel: l.channel,
       ownerId: l.ownerId,
       previousStage: l.stage,
-      newStage: "Closed",
-      details: `Admin deleted / closed lead`,
+      newStage: "Trash",
+      details: `Admin moved lead to trash`,
     }).catch((err) => console.error("[audit] deleteLeadAdmin log error:", err));
     return l;
   }

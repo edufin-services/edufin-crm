@@ -172,10 +172,10 @@ function LeadPlatformBadge({
   let theme = "bg-zinc-100 text-zinc-700 border-zinc-200";
 
   if (isFb) {
-    label = platform === "fb" && channel === "Meta Ads" ? "Facebook (fb)" : "Facebook";
+    label = "Facebook";
     theme = "bg-blue-50 text-[#1877F2] border-blue-200";
   } else if (isIg) {
-    label = platform === "ig" && channel === "Meta Ads" ? "Instagram (ig)" : "Instagram";
+    label = "Instagram";
     theme = "bg-pink-50 text-pink-700 border-pink-200";
   } else if (channel === "WhatsApp") {
     label = "WhatsApp";
@@ -403,7 +403,7 @@ export default function AdminLeadsClient({
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
   const [reminderLead, setReminderLead] = useState<Lead | null>(null);
   const [viewingNoteLead, setViewingNoteLead] = useState<Lead | null>(null);
-  const [leadToDelete, setLeadToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [leadToDelete, setLeadToDelete] = useState<{ id: string; name: string; stage?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const searchParams = useSearchParams();
@@ -701,18 +701,26 @@ export default function AdminLeadsClient({
 
   function requestDeleteLead(id: string) {
     const target = leads.find((l) => l.id === id);
-    setLeadToDelete({ id, name: target?.name || "this lead" });
+    setLeadToDelete({ id, name: target?.name || "this lead", stage: target?.stage });
   }
 
   async function handleConfirmDelete() {
     if (!leadToDelete) return;
     const id = leadToDelete.id;
+    const isAlreadyTrash = leadToDelete.stage === "Trash";
     setIsDeleting(true);
     try {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      if (editingLead?.id === id) setEditingLead(null);
-      setLeadToDelete(null);
-      await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
+      if (isAlreadyTrash) {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+        if (editingLead?.id === id) setEditingLead(null);
+        setLeadToDelete(null);
+        await fetch(`/api/admin/leads/${id}?permanent=true`, { method: "DELETE" });
+      } else {
+        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, stage: "Trash" } : l)));
+        if (editingLead?.id === id) setEditingLead((prev) => (prev ? { ...prev, stage: "Trash" } : null));
+        setLeadToDelete(null);
+        await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -1353,7 +1361,7 @@ export default function AdminLeadsClient({
                             </div>
 
                             {/* Stage progression action button */}
-                            {nextStage ? (
+                            {nextStage && nextStage !== "Trash" ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); triggerStageChange(deal.id, nextStage); }}
                                 className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-all active:scale-95 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700"
@@ -1367,6 +1375,14 @@ export default function AdminLeadsClient({
                                 <span>✓</span>
                                 <span>Won</span>
                               </span>
+                            ) : stage === "Trash" ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); triggerStageChange(deal.id, "Initial Contact"); }}
+                                className="flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 px-2.5 py-1 text-[11px] font-bold text-rose-700 shadow-2xs transition-all active:scale-95 whitespace-nowrap"
+                                title="Restore to Initial Contact"
+                              >
+                                <span>Restore ↺</span>
+                              </button>
                             ) : (
                               <span className="flex items-center gap-1 rounded-lg bg-zinc-100 border border-zinc-200 px-2.5 py-0.5 text-[11px] font-bold text-zinc-600 whitespace-nowrap">
                                 Final
@@ -1380,13 +1396,15 @@ export default function AdminLeadsClient({
                 </div>
 
                 {/* Add Lead button pinned at column bottom */}
-                <button
-                  onClick={() => setModalStage(stage)}
-                  className="mt-2 shrink-0 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-300 bg-white/70 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-white hover:border-zinc-400 shadow-2xs transition-all cursor-pointer"
-                >
-                  <span className="text-sm font-bold leading-none">+</span>
-                  <span>Add Lead</span>
-                </button>
+                {stage !== "Trash" && (
+                  <button
+                    onClick={() => setModalStage(stage)}
+                    className="mt-2 shrink-0 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-300 bg-white/70 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-white hover:border-zinc-400 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <span className="text-sm font-bold leading-none">+</span>
+                    <span>Add Lead</span>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -1674,10 +1692,14 @@ export default function AdminLeadsClient({
         isOpen={Boolean(leadToDelete)}
         onClose={() => setLeadToDelete(null)}
         onConfirm={handleConfirmDelete}
-        title="Move Lead to Trash?"
-        description="Are you sure you want to move this lead to trash? You can restore it anytime from the Trash tab."
+        title={leadToDelete?.stage === "Trash" ? "Permanently Delete Lead?" : "Move Lead to Trash?"}
+        description={
+          leadToDelete?.stage === "Trash"
+            ? "Are you sure you want to permanently delete this lead? This cannot be undone."
+            : "Are you sure you want to move this lead to trash? You can review or restore it anytime from the Trash column."
+        }
         leadName={leadToDelete?.name}
-        confirmLabel="Move to Trash"
+        confirmLabel={leadToDelete?.stage === "Trash" ? "Delete Permanently" : "Move to Trash"}
         cancelLabel="Cancel"
         variant="danger"
         isLoading={isDeleting}

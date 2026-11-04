@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ALL_VALID_STAGES, STAGES, normalizeStage } from "@/lib/constants";
-import { deleteLeadAdmin, getLeadByIdAdmin, getUserById, updateLeadAdmin } from "@/lib/db";
+import { deleteLeadAdmin, permanentlyDeleteLeadAdmin, getLeadByIdAdmin, getUserById, updateLeadAdmin } from "@/lib/db";
 import { EMAIL_STAGES, sendStageEmail } from "@/lib/email";
 import { getSession } from "@/lib/session";
 
@@ -106,11 +106,16 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/admin/
   return NextResponse.json({ lead });
 }
 
-export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/admin/leads/[id]">) {
+export async function DELETE(request: NextRequest, ctx: RouteContext<"/api/admin/leads/[id]">) {
   const session = await getSession();
   if (!session?.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
   const { id } = await ctx.params;
+  const permanent = new URL(request.url).searchParams.get("permanent") === "true";
+  if (permanent) {
+    const deleted = await permanentlyDeleteLeadAdmin(id);
+    if (!deleted) return NextResponse.json({ error: "Lead not found." }, { status: 404 });
+    return NextResponse.json({ success: true, permanent: true });
+  }
   const lead = await deleteLeadAdmin(id);
   if (!lead) return NextResponse.json({ error: "Lead not found." }, { status: 404 });
   return NextResponse.json({ success: true });

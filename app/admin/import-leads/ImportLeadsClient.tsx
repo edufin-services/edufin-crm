@@ -831,8 +831,8 @@ export default function ImportLeadsClient({
             className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-700 focus:outline-none focus:bg-white focus:border-rose-400 cursor-pointer"
           >
             <option value="all">All Platforms</option>
-            <option value="fb">Facebook (fb)</option>
-            <option value="ig">Instagram (ig)</option>
+            <option value="fb">Facebook</option>
+            <option value="ig">Instagram</option>
             <option value="other">Other Channels</option>
           </select>
 
@@ -1002,11 +1002,11 @@ export default function ImportLeadsClient({
                       <td className="px-5 py-4">
                         {lead.platform === "fb" || lead.channel === "Facebook" ? (
                           <span className="inline-block rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 text-xs font-bold whitespace-nowrap">
-                            Facebook (fb)
+                            Facebook
                           </span>
                         ) : lead.platform === "ig" || lead.channel === "Instagram" ? (
                           <span className="inline-block rounded-md bg-pink-50 text-pink-700 border border-pink-200 px-2.5 py-1 text-xs font-bold whitespace-nowrap">
-                            Instagram (ig)
+                            Instagram
                           </span>
                         ) : (
                           <span className="inline-block rounded-md bg-zinc-100 text-zinc-700 border border-zinc-200 px-2.5 py-1 text-xs font-bold whitespace-nowrap">
@@ -1218,7 +1218,7 @@ export default function ImportLeadsClient({
                                 : "bg-zinc-100 text-zinc-700 border-zinc-200"
                             }`}
                           >
-                            {item.platform === "fb" ? "Facebook (fb)" : item.platform === "ig" ? "Instagram (ig)" : item.platform}
+                            {item.platform === "fb" ? "Facebook" : item.platform === "ig" ? "Instagram" : item.platform}
                           </span>
                         </td>
                         <td className={`px-4 py-2.5 font-bold ${item.isDuplicate ? "text-zinc-500 line-through" : "text-zinc-900"}`}>

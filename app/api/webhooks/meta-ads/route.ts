@@ -456,7 +456,7 @@ export async function POST(request: NextRequest) {
 
         // Format lead form notes
         const formNotesLines: string[] = [];
-        if (leadPlatform) formNotesLines.push(`• Platform: ${leadPlatform === "fb" ? "Facebook (fb)" : leadPlatform === "ig" ? "Instagram (ig)" : leadPlatform}`);
+        if (leadPlatform) formNotesLines.push(`• Platform: ${leadPlatform === "fb" ? "Facebook" : leadPlatform === "ig" ? "Instagram" : leadPlatform}`);
         if (leadState) formNotesLines.push(`• State: ${leadState}`);
         if (leadCity) formNotesLines.push(`• City: ${leadCity}`);
         if (leadNeetStatus) formNotesLines.push(`• NEET Status: ${leadNeetStatus}`);

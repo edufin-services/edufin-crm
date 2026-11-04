@@ -13,7 +13,7 @@ export const COUNTRIES = COUNTRY_OPTIONS;
 export const SERVICES = COUNTRY_OPTIONS;
 export type Service = CountryOption;
 
-export const STAGES = [
+export const PIPELINE_STAGES = [
   "Initial Contact",
   "Connected",
   "Interested",
@@ -25,6 +25,11 @@ export const STAGES = [
   "Invitation",
   "3rd Payment",
   "Visa Process",
+] as const;
+
+export const STAGES = [
+  ...PIPELINE_STAGES,
+  "Trash",
 ] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -63,6 +68,7 @@ export function normalizeStage(stage: string | null | undefined): Stage {
   if (lower === "invitation") return "Invitation";
   if (lower === "3rd payment" || lower === "third payment" || lower === "fee deposit") return "3rd Payment";
   if (lower === "visa process" || lower === "visa success" || lower === "confirmed" || lower === "visa" || lower === "vfs") return "Visa Process";
+  if (lower === "trash" || lower === "closed") return "Trash";
 
   const match = STAGES.find((s) => s.toLowerCase() === lower);
   if (match) return match;
@@ -82,6 +88,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   "Invitation": "INVITATION",
   "3rd Payment": "3RD PAYMENT",
   "Visa Process": "VISA PROCESS",
+  "Trash": "TRASH",
 };
 
 export type StageMetaConfig = {
@@ -181,6 +188,14 @@ export const STAGE_META: Record<Stage, StageMetaConfig> = {
     text: "text-sky-600",
     border: "border-sky-400",
     lineColor: "bg-sky-400",
+  },
+  "Trash": {
+    dot: "bg-rose-500",
+    bar: "bg-rose-500",
+    badge: "bg-rose-50 text-rose-700 border-rose-200",
+    text: "text-rose-600",
+    border: "border-rose-400",
+    lineColor: "bg-rose-400",
   },
 };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { COUNTRY_OPTIONS, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, type Channel, type Stage } from "@/lib/constants";
+import { COUNTRY_OPTIONS, PIPELINE_STAGES, SERVICES, STAGES, STAGE_LABELS, STAGE_META, normalizeStage, type Channel, type Stage } from "@/lib/constants";
 import { formatRelativeTime } from "@/lib/format";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import SetReminderModal from "./SetReminderModal";
@@ -629,10 +629,13 @@ export default function LeadDrawer({
 
   // Stage info
   const normalizedLeadStage = normalizeStage(lead.stage);
-  const stageIndex = Math.max(0, STAGES.indexOf(normalizedLeadStage));
-  const nextStage = STAGES[stageIndex + 1] as Stage | undefined;
-  const isAtFinalStage = !nextStage;
-  const progressPct = Math.round(((stageIndex + 1) / STAGES.length) * 100);
+  const isTrash = normalizedLeadStage === "Trash";
+  const pipelineIndex = Math.max(0, PIPELINE_STAGES.indexOf(normalizedLeadStage as any));
+  const nextStage = isTrash || normalizedLeadStage === "Visa Process"
+    ? undefined
+    : (PIPELINE_STAGES[pipelineIndex + 1] as Stage | undefined);
+  const isAtFinalStage = normalizedLeadStage === "Visa Process" || isTrash;
+  const progressPct = isTrash ? 0 : Math.round(((pipelineIndex + 1) / PIPELINE_STAGES.length) * 100);
   const daysActive = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24));
 
   // ── Upload handlers ─────────────────────────────────────────────────────────
@@ -874,8 +877,11 @@ export default function LeadDrawer({
               {initials(lead.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-black text-zinc-900 truncate">{lead.name}</p>
-              <p className="text-[11px] font-medium text-zinc-500">{lead.channel} · Chat</p>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full shrink-0 ${stageColor[lead.stage] ?? "bg-zinc-400"}`} />
+                <p className="text-xs font-black text-zinc-900 truncate">{lead.stage}</p>
+              </div>
+              <p className="text-[11px] font-medium text-zinc-500 mt-0.5">{lead.channel} · Chat</p>
             </div>
           </div>
 
@@ -957,14 +963,24 @@ export default function LeadDrawer({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${stageColor[lead.stage] ?? "bg-zinc-400"}`} />
-                  <span className="text-sm font-extrabold text-zinc-900 leading-tight truncate">{lead.stage}</span>
+                  <span className="text-sm font-extrabold text-zinc-900 leading-tight truncate">{name || lead.name}</span>
                   <span className="text-[11px] font-medium text-zinc-400 shrink-0">({formatRelativeTime(lead.createdAt)})</span>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center flex-wrap gap-2 mt-1">
+                  {(phone || lead.phone) && (
+                    <a
+                      href={`tel:${phone || lead.phone}`}
+                      className="inline-flex items-center gap-1 text-[11.5px] font-bold text-zinc-700 hover:text-emerald-700 transition-colors"
+                      title="Call lead"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-400 shrink-0">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span>{phone || lead.phone}</span>
+                    </a>
+                  )}
                   <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10.5px] font-bold text-zinc-700">
                     {lead.channel}
-                    {lead.platform ? ` · ${lead.platform === "fb" ? "Facebook (fb)" : lead.platform === "ig" ? "Instagram (ig)" : lead.platform.toUpperCase()}` : ""}
                   </span>
                   {!isAtFinalStage && (
                     <span className="text-[11px] font-extrabold text-emerald-600">{progressPct}%</span>
@@ -1544,12 +1560,12 @@ export default function LeadDrawer({
 
               <SectionHeader label="Pipeline Progress" />
               <div className="px-5 py-3 space-y-2.5">
-                {STAGES.map((s, i) => (
+                {PIPELINE_STAGES.map((s, i) => (
                   <div key={s} className="flex items-center gap-3">
-                    <div className={`h-2 w-2 rounded-full flex-none ${i <= stageIndex ? (stageColor[s] ?? "bg-zinc-400") : "bg-zinc-200"}`} />
-                    <span className={`text-xs flex-1 ${i === stageIndex ? "font-semibold text-zinc-900" : i < stageIndex ? "text-zinc-500 line-through" : "text-zinc-400"}`}>{s}</span>
-                    {i === stageIndex && <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">Current</span>}
-                    {i < stageIndex && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-500"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    <div className={`h-2 w-2 rounded-full flex-none ${!isTrash && i <= pipelineIndex ? (stageColor[s] ?? "bg-zinc-400") : "bg-zinc-200"}`} />
+                    <span className={`text-xs flex-1 ${!isTrash && i === pipelineIndex ? "font-semibold text-zinc-900" : !isTrash && i < pipelineIndex ? "text-zinc-500 line-through" : "text-zinc-400"}`}>{s}</span>
+                    {!isTrash && i === pipelineIndex && <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">Current</span>}
+                    {!isTrash && i < pipelineIndex && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-500"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                 ))}
               </div>
@@ -1559,7 +1575,7 @@ export default function LeadDrawer({
                 {[
                   { label: "Created", value: formatRelativeTime(lead.createdAt) },
                   { label: "Channel", value: lead.channel },
-                  ...(lead.platform ? [{ label: "Platform", value: lead.platform === "fb" ? "Facebook (fb)" : lead.platform === "ig" ? "Instagram (ig)" : lead.platform.toUpperCase() }] : []),
+                  ...(lead.platform ? [{ label: "Platform", value: lead.platform === "fb" ? "Facebook" : lead.platform === "ig" ? "Instagram" : lead.platform.toUpperCase() }] : []),
                   ...(lead.campaign ? [{ label: "Campaign", value: lead.campaign }] : []),
                   ...(lead.adset ? [{ label: "AdSet", value: lead.adset }] : []),
                   ...(lead.adName ? [{ label: "Ad", value: lead.adName }] : []),

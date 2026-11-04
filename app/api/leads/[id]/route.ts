@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ALL_VALID_STAGES, STAGES, normalizeStage } from "@/lib/constants";
-import { deleteLead, deleteLeadAdmin, getLeadById, getUserById, updateLead, updateLeadAdmin } from "@/lib/db";
+import { deleteLead, deleteLeadAdmin, getLeadById, getUserById, permanentlyDeleteLead, permanentlyDeleteLeadAdmin, updateLead, updateLeadAdmin } from "@/lib/db";
 import { EMAIL_STAGES, sendStageEmail } from "@/lib/email";
 import { getSession } from "@/lib/session";
 
@@ -126,10 +126,19 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/leads/
   return NextResponse.json({ lead });
 }
 
-export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/leads/[id]">) {
+export async function DELETE(request: NextRequest, ctx: RouteContext<"/api/leads/[id]">) {
   const session = await getSession();
   if (!session?.userId && !session?.isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
+  const permanent = new URL(request.url).searchParams.get("permanent") === "true";
+  if (permanent) {
+    if (session.isAdmin) {
+      await permanentlyDeleteLeadAdmin(id);
+    } else {
+      await permanentlyDeleteLead(id, session.userId!);
+    }
+    return NextResponse.json({ success: true, permanent: true });
+  }
   if (session.isAdmin) {
     await deleteLeadAdmin(id);
   } else {
