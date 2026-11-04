@@ -114,6 +114,15 @@ const STAGE_CONFIG: Record<Stage, {
     gradient: "from-emerald-500 to-teal-600",
     textColor: "text-emerald-600",
   },
+  Trash: {
+    label: "Trash",
+    desc: "Deleted enquiries",
+    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
+    dot: "bg-rose-500",
+    bar: "bg-rose-500",
+    gradient: "from-rose-500 to-red-600",
+    textColor: "text-rose-600",
+  },
 };
 
 const CHANNEL_THEMES: Record<string, { badge: string; bar: string; icon: string }> = {

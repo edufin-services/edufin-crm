@@ -758,7 +758,7 @@ export async function updateLead(
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
   if (updates.stage === "Trash") {
     setUpdates.deletedAt = now;
-  } else if (updates.stage && updates.stage !== "Trash" && prev?.deletedAt) {
+  } else if (updates.stage && prev?.deletedAt) {
     setUpdates.deletedAt = null;
   }
   if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
@@ -878,7 +878,7 @@ export async function updateLeadAdmin(
   const setUpdates: Record<string, any> = { ...updates, updatedAt: now };
   if (updates.stage === "Trash") {
     setUpdates.deletedAt = now;
-  } else if (updates.stage && updates.stage !== "Trash" && prev?.deletedAt) {
+  } else if (updates.stage && prev?.deletedAt) {
     setUpdates.deletedAt = null;
   }
   if (((updates.stage as string) === "Visa Success" || (updates.stage as string) === "Confirmed") && (prev?.stage as string) !== "Visa Success" && (prev?.stage as string) !== "Confirmed") {
