@@ -96,6 +96,30 @@ export default function ImportLeadsClient({
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSyncingMeta, setIsSyncingMeta] = useState(false);
+
+  async function handleSyncMetaLeads() {
+    try {
+      setIsSyncingMeta(true);
+      const res = await fetch("/api/admin/integrations/meta-ads/sync", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to sync Meta leads");
+      }
+      showToast(data.message || `Sync complete: ${data.newlyAdded} new leads added.`);
+      const refreshRes = await fetch("/api/admin/leads/import");
+      const refreshData = await refreshRes.json();
+      if (refreshRes.ok && refreshData.leads) {
+        setLeads(refreshData.leads);
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to sync Meta leads.", "error");
+    } finally {
+      setIsSyncingMeta(false);
+    }
+  }
 
   function showToast(text: string, type: "success" | "error" = "success") {
     setToastMessage({ text, type });
@@ -705,6 +729,24 @@ export default function ImportLeadsClient({
               Sample .csv
             </button>
           </div>
+
+          <button
+            onClick={handleSyncMetaLeads}
+            disabled={isSyncingMeta}
+            className="rounded-xl border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+            title="Fetch recent leads directly from Meta Lead Ads without uploading files"
+          >
+            <svg
+              className={`w-3.5 h-3.5 ${isSyncingMeta ? "animate-spin text-purple-700" : ""}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {isSyncingMeta ? "Syncing Meta..." : "Sync Meta Leads"}
+          </button>
 
           <button
             onClick={() => fileInputRef.current?.click()}

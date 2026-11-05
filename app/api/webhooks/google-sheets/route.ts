@@ -297,7 +297,6 @@ export async function POST(request: NextRequest) {
         phone,
         channel: "Google Sheets",
         createdAt: { $gte: twelveHoursAgo },
-        deletedAt: null,
       });
 
       if (existing) {

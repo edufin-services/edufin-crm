@@ -37,6 +37,8 @@ export default function MetaAdsModal({
   const [tokenInspection, setTokenInspection] = useState<any>(null);
   const [subscribingPage, setSubscribingPage] = useState(false);
   const [subscribeFeedback, setSubscribeFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [syncingLeads, setSyncingLeads] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
 
   // Test Simulator State
   const [simName, setSimName] = useState("Aman Sharma");
@@ -134,6 +136,25 @@ export default function MetaAdsModal({
       setSubscribeFeedback({ success: false, message: err.message || "Network error" });
     } finally {
       setSubscribingPage(false);
+    }
+  }
+
+  async function handleSyncMetaLeads() {
+    try {
+      setSyncingLeads(true);
+      setSyncFeedback(null);
+      const res = await fetch("/api/admin/integrations/meta-ads/sync", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to sync leads from Meta");
+      }
+      setSyncFeedback({ success: true, message: data.message });
+    } catch (err: any) {
+      setSyncFeedback({ success: false, message: err.message || "Failed to sync leads" });
+    } finally {
+      setSyncingLeads(false);
     }
   }
 
@@ -344,6 +365,34 @@ export default function MetaAdsModal({
                   {subscribeFeedback && (
                     <div className={`p-2 rounded-lg text-[11px] font-bold ${subscribeFeedback.success ? "bg-emerald-100 text-emerald-900" : "bg-red-100 text-red-900"}`}>
                       {subscribeFeedback.message}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-emerald-100">
+                    <span className="text-[11px] text-emerald-800">
+                      Missed leads? Fetch all recent leads directly from your Meta Lead Ads forms:
+                    </span>
+                    <button
+                      onClick={handleSyncMetaLeads}
+                      disabled={syncingLeads}
+                      className="text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 disabled:opacity-50 px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 ${syncingLeads ? "animate-spin text-white" : ""}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {syncingLeads ? "Syncing with Meta..." : "Sync Meta Leads Now"}
+                    </button>
+                  </div>
+
+                  {syncFeedback && (
+                    <div className={`p-2.5 rounded-lg text-[11px] font-bold ${syncFeedback.success ? "bg-purple-100 text-purple-900 border border-purple-200" : "bg-red-100 text-red-900 border border-red-200"}`}>
+                      {syncFeedback.message}
                     </div>
                   )}
                 </div>

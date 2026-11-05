@@ -289,7 +289,7 @@ export const WebsiteLeadModel = models.WebsiteLead ?? model("WebsiteLead", Websi
 // ── Admin Settings ────────────────────────────────────────────────────────
 
 const AdminSettingsSchema = new Schema({
-  id: { type: String, default: "admin_settings" },
+  id: { type: String, default: "admin_settings", unique: true },
   name: { type: String, default: "Administrator" },
   email: { type: String, default: "admin@edufinservices.com" },
   phone: { type: String, default: "+91 98765 43210" },

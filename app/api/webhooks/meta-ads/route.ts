@@ -94,9 +94,9 @@ export async function POST(request: NextRequest) {
 
     const pageAccessToken =
       (adminSettings as any)?.metaPageAccessToken ||
-      (adminSettings as any)?.metaSystemUserToken ||
       process.env.META_PAGE_ACCESS_TOKEN ||
       process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
+      (adminSettings as any)?.metaSystemUserToken ||
       "";
 
     // ── Case A: Direct Test Lead / Simulator Payload ───────────────────────
@@ -112,7 +112,6 @@ export async function POST(request: NextRequest) {
       if (cleanPhone && cleanPhone.length >= 7) {
         const phonePattern = cleanPhone.split("").join("\\D*");
         const existing = await LeadModel.findOne({
-          deletedAt: null,
           phone: { $regex: phonePattern },
         });
         if (existing) {
@@ -438,7 +437,6 @@ export async function POST(request: NextRequest) {
           }
 
           const existing = await LeadModel.findOne({
-            deletedAt: null,
             $or: orConditions,
           });
 

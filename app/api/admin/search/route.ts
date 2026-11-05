@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const [agents, leads, deletedLeads] = await Promise.all([
     getAllUsers(),
-    getAllLeads(),
+    getAllLeads(false),
     getDeletedLeads(),
   ]);
 
