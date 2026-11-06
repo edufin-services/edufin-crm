@@ -548,30 +548,34 @@ export default function AdminLeadsClient({
         }
 
         // Date Filter
-        if (datePreset !== "All Dates") {
+        if (datePreset !== "All Dates" && datePreset !== "All Time") {
           const leadTime = new Date(l.createdAt).getTime();
           const now = new Date();
 
           if (datePreset === "Today") {
-            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-            if (leadTime < startOfToday) return false;
-          } else if (datePreset === "Last 7 Days") {
-            const d = new Date();
-            d.setDate(d.getDate() - 7);
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+            if (leadTime < startOfToday || leadTime > endOfToday) return false;
+          } else if (datePreset === "Yesterday") {
+            const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
+            const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999).getTime();
+            if (leadTime < startOfYesterday || leadTime > endOfYesterday) return false;
+          } else if (datePreset === "Last 7 Days" || datePreset === "7 Days") {
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 0, 0, 0, 0);
             if (leadTime < d.getTime()) return false;
-          } else if (datePreset === "Last 30 Days") {
-            const d = new Date();
-            d.setDate(d.getDate() - 30);
+          } else if (datePreset === "Last 30 Days" || datePreset === "30 Days") {
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0);
             if (leadTime < d.getTime()) return false;
-          } else if (datePreset === "Custom Range") {
+          } else if (datePreset === "Custom Range" || datePreset === "Custom") {
             if (startDate) {
-              const start = new Date(startDate).getTime();
+              const [sy, sm, sd] = startDate.split("-").map(Number);
+              const start = new Date(sy, (sm || 1) - 1, sd || 1, 0, 0, 0, 0).getTime();
               if (leadTime < start) return false;
             }
             if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
-              if (leadTime > end.getTime()) return false;
+              const [ey, em, ed] = endDate.split("-").map(Number);
+              const end = new Date(ey, (em || 1) - 1, ed || 1, 23, 59, 59, 999).getTime();
+              if (leadTime > end) return false;
             }
           }
         }
@@ -910,10 +914,11 @@ export default function AdminLeadsClient({
                     Date Range
                   </label>
                   <div className="flex items-center gap-1 p-0.5 bg-zinc-100/90 rounded-xl">
-                    {(["All Time", "Today", "7 Days", "30 Days", "Custom"] as const).map((preset) => {
+                    {(["All Time", "Today", "Yesterday", "7 Days", "30 Days", "Custom"] as const).map((preset) => {
                       const isActive =
                         (preset === "All Time" && (datePreset === "All Time" || datePreset === "All Dates")) ||
                         (preset === "Today" && datePreset === "Today") ||
+                        (preset === "Yesterday" && datePreset === "Yesterday") ||
                         (preset === "7 Days" && (datePreset === "7 Days" || datePreset === "Last 7 Days")) ||
                         (preset === "30 Days" && (datePreset === "30 Days" || datePreset === "Last 30 Days")) ||
                         (preset === "Custom" && (datePreset === "Custom" || datePreset === "Custom Range"));
@@ -924,6 +929,7 @@ export default function AdminLeadsClient({
                           type="button"
                           onClick={() => {
                             if (preset === "All Time") setDatePreset("All Dates");
+                            else if (preset === "Yesterday") setDatePreset("Yesterday");
                             else if (preset === "7 Days") setDatePreset("Last 7 Days");
                             else if (preset === "30 Days") setDatePreset("Last 30 Days");
                             else if (preset === "Custom") setDatePreset("Custom Range");
